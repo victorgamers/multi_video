@@ -72,7 +72,10 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useVideoStore } from '../../stores/video'
 import WebRTCPlayer from './WebRTCPlayer.vue'
+
+const videoStore = useVideoStore()
 
 const props = defineProps({
   source: {
@@ -101,6 +104,12 @@ const statusText = computed(() => {
 
 const handleStateChange = (state) => {
   connectionState.value = state
+  // 同步更新 videoStore 中的状态
+  if (state === 'connected') {
+    videoStore.updateSource(props.source.id, { status: 'online' })
+  } else if (state === 'failed' || state === 'closed') {
+    videoStore.updateSource(props.source.id, { status: 'offline' })
+  }
 }
 
 const handleError = (error) => {

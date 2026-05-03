@@ -42,54 +42,17 @@
       </div>
     </div>
     
-    <!-- 筛选工具栏 -->
-    <div v-if="logData.length" class="filter-toolbar">
-      <div class="filter-group">
-        <input 
-          v-model="searchText" 
-          type="text" 
-          class="input" 
-          placeholder="搜索日志内容..."
-          style="width: 240px;"
-        />
-      </div>
-      <div class="filter-group">
-        <label>日志级别:</label>
-        <select v-model="filterLevel" class="select filter-select">
-          <option value="">全部</option>
-          <option value="INFO">INFO</option>
-          <option value="WARN">WARN</option>
-          <option value="ERROR">ERROR</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>时间范围:</label>
-        <input v-model="filterDate" type="date" class="input" style="width: 150px;" />
-      </div>
-      <button class="btn btn-secondary btn-sm" @click="resetFilters">重置</button>
-    </div>
-    
-    <!-- 日志表格 -->
+    <!-- 数据表格 -->
     <div v-if="logData.length" class="log-table-wrapper">
       <table class="log-table">
         <thead>
           <tr>
-            <th style="width: 180px;">时间</th>
-            <th style="width: 100px;">级别</th>
-            <th style="width: 120px;">来源</th>
-            <th>日志内容</th>
+            <th v-for="col in columns" :key="col">{{ col }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(log, index) in paginatedLogs" :key="index">
-            <td class="log-time">{{ log.时间 || log.time || log.timestamp || '' }}</td>
-            <td>
-              <span class="log-level" :class="getLevelClass(log.级别 || log.level || 'INFO')">
-                {{ log.级别 || log.level || 'INFO' }}
-              </span>
-            </td>
-            <td class="log-source">{{ log.来源 || log.source || '-' }}</td>
-            <td class="log-message">{{ log.日志内容 || log.message || log.content || '' }}</td>
+          <tr v-for="(row, index) in logData" :key="index">
+            <td v-for="col in columns" :key="col">{{ getCellValue(row, col) }}</td>
           </tr>
         </tbody>
       </table>
@@ -110,28 +73,6 @@
         支持 .xlsx 和 .xls 格式
       </p>
     </div>
-    
-    <!-- 分页 -->
-    <div v-if="filteredLogs.length > pageSize" class="pagination">
-      <button @click="currentPage--" :disabled="currentPage <= 1">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-          <polyline points="15 18 9 12 15 6"/>
-        </svg>
-      </button>
-      <button 
-        v-for="page in visiblePages" 
-        :key="page"
-        :class="{ active: page === currentPage }"
-        @click="currentPage = page"
-      >
-        {{ page }}
-      </button>
-      <button @click="currentPage++" :disabled="currentPage >= totalPages">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-          <polyline points="9 18 15 12 9 6"/>
-        </svg>
-      </button>
-    </div>
   </div>
 </template>
 
@@ -140,60 +81,12 @@ import { ref, computed } from 'vue'
 
 const fileInput = ref(null)
 const logData = ref([])
-const searchText = ref('')
-const filterLevel = ref('')
-const filterDate = ref('')
-const currentPage = ref(1)
-const pageSize = 20
+const XLSX = ref(null)
 
-const filteredLogs = computed(() => {
-  let result = logData.value
-  
-  if (searchText.value) {
-    const search = searchText.value.toLowerCase()
-    result = result.filter(log => {
-      const message = (log.日志内容 || log.message || log.content || '').toLowerCase()
-      const source = (log.来源 || log.source || '').toLowerCase()
-      return message.includes(search) || source.includes(search)
-    })
-  }
-  
-  if (filterLevel.value) {
-    result = result.filter(log => {
-      const level = (log.级别 || log.level || '').toUpperCase()
-      return level === filterLevel.value
-    })
-  }
-  
-  if (filterDate.value) {
-    result = result.filter(log => {
-      const time = log.时间 || log.time || log.timestamp || ''
-      return time.includes(filterDate.value)
-    })
-  }
-  
-  return result
-})
-
-const totalPages = computed(() => Math.ceil(filteredLogs.value.length / pageSize))
-
-const paginatedLogs = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
-  return filteredLogs.value.slice(start, start + pageSize)
-})
-
-const visiblePages = computed(() => {
-  const pages = []
-  const maxVisible = 5
-  let start = Math.max(1, currentPage.value - Math.floor(maxVisible / 2))
-  let end = Math.min(totalPages.value, start + maxVisible - 1)
-  if (end - start < maxVisible - 1) {
-    start = Math.max(1, end - maxVisible + 1)
-  }
-  for (let i = start; i <= end; i++) {
-    pages.push(i)
-  }
-  return pages
+// 获取表格列名
+const columns = computed(() => {
+  if (logData.value.length === 0) return []
+  return Object.keys(logData.value[0])
 })
 
 const triggerFileInput = () => {
@@ -205,28 +98,16 @@ const handleFileUpload = async (event) => {
   if (!file) return
   
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-    
-    // 使用 fetch API 读取文件
-    const response = await fetch('http://localhost:5173/src/utils/readExcel.js', {
-      method: 'POST',
-      body: formData
-    }).catch(() => null)
-    
-    // 使用 SheetJS (xlsx) 直接在前端解析
-    const XLSX = window.XLSX
-    if (!XLSX) {
-      // 动态加载 SheetJS
+    // 加载 SheetJS
+    if (!XLSX.value) {
       await loadSheetJS()
     }
     
     const data = await parseExcelFile(file)
     logData.value = data
-    currentPage.value = 1
   } catch (error) {
     console.error('读取文件失败:', error)
-    alert('文件读取失败，请确保文件格式正确')
+    alert('文件读取失败: ' + error.message)
   }
   
   event.target.value = ''
@@ -235,27 +116,36 @@ const handleFileUpload = async (event) => {
 const loadSheetJS = () => {
   return new Promise((resolve, reject) => {
     if (window.XLSX) {
+      XLSX.value = window.XLSX
       resolve()
       return
     }
     const script = document.createElement('script')
     script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'
-    script.onload = resolve
-    script.onerror = reject
+    script.onload = () => {
+      XLSX.value = window.XLSX
+      resolve()
+    }
+    script.onerror = () => reject(new Error('加载 SheetJS 失败'))
     document.head.appendChild(script)
   })
 }
 
 const parseExcelFile = (file) => {
   return new Promise((resolve, reject) => {
+    if (!XLSX.value) {
+      reject(new Error('SheetJS 未加载'))
+      return
+    }
+    
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result)
-        const workbook = XLSX.read(data, { type: 'array', cellDates: true })
+        const workbook = XLSX.value.read(data, { type: 'array', cellDates: true })
         const firstSheetName = workbook.SheetNames[0]
         const worksheet = workbook.Sheets[firstSheetName]
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+        const jsonData = XLSX.value.utils.sheet_to_json(worksheet, { defval: '' })
         resolve(jsonData)
       } catch (err) {
         reject(err)
@@ -267,27 +157,20 @@ const parseExcelFile = (file) => {
 }
 
 const clearData = () => {
-  if (confirm('确定要清空当前日志数据吗？')) {
+  if (confirm('确定要清空数据吗？')) {
     logData.value = []
-    searchText.value = ''
-    filterLevel.value = ''
-    filterDate.value = ''
-    currentPage.value = 1
   }
 }
 
-const resetFilters = () => {
-  searchText.value = ''
-  filterLevel.value = ''
-  filterDate.value = ''
-  currentPage.value = 1
-}
-
-const getLevelClass = (level) => {
-  const upperLevel = level.toUpperCase()
-  if (upperLevel === 'ERROR') return 'level-error'
-  if (upperLevel === 'WARN' || upperLevel === 'WARNING') return 'level-warn'
-  return 'level-info'
+// 获取单元格值
+const getCellValue = (row, col) => {
+  const value = row[col]
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'object') {
+    if (value instanceof Date) return value.toLocaleString()
+    return JSON.stringify(value)
+  }
+  return String(value)
 }
 </script>
 
