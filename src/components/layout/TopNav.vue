@@ -139,11 +139,33 @@ const LogIcon = {
   }
 }
 
+const MultimodalIcon = {
+  render() {
+    return h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2' }, [
+      h('path', { d: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z' }),
+      h('polyline', { points: '3.27 6.96 12 12.01 20.73 6.96' }),
+      h('line', { x1: '12', y1: '22.08', x2: '12', y2: '12' })
+    ])
+  }
+}
+
+const ScreenshotIcon = {
+  render() {
+    return h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2' }, [
+      h('rect', { x: '3', y: '3', width: '18', height: '18', rx: '2', ry: '2' }),
+      h('circle', { cx: '8.5', cy: '8.5', r: '1.5' }),
+      h('polyline', { points: '21 15 16 10 5 21' })
+    ])
+  }
+}
+
 const navLinks = [
   { path: '/dashboard', label: '仪表盘', icon: DashboardIcon },
   { path: '/video', label: '视频监控', icon: VideoIcon },
+  { path: '/screenshots', label: '截图列表', icon: ScreenshotIcon },
   { path: '/strategy', label: '策略配置', icon: StrategyIcon },
   { path: '/alarm', label: '预警管理', icon: AlarmIcon },
+  { path: '/multimodal', label: '多模态', icon: MultimodalIcon },
   { path: '/logs', label: '日志监控', icon: LogIcon },
   { path: '/users', label: '用户管理', icon: UsersIcon }
 ]
@@ -166,6 +188,7 @@ let timeInterval = null
 onMounted(() => {
   updateTime()
   timeInterval = setInterval(updateTime, 1000)
+  userStore.restoreSession()
   
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.user-menu')) {

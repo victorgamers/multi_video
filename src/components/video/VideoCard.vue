@@ -3,9 +3,9 @@
     <div class="video-container">
       <!-- WebRTC 播放器 -->
       <WebRTCPlayer 
-        v-if="source.url && source.status !== 'offline'"
+        v-if="source.webrtc_url && source.status !== 'offline'"
         ref="playerRef"
-        :url="source.url"
+        :url="source.webrtc_url"
         :zlm-host="source.zlmHost || '192.168.0.101'"
         :zlm-port="source.zlmPort || 80"
         :zlm-secret="source.zlmSecret || ''"
@@ -64,8 +64,7 @@
       </div>
     </div>
     <div class="video-footer">
-      <span class="resolution">{{ source.resolution }}</span>
-      <span class="fps">{{ source.fps }} fps</span>
+      <span class="location">{{ source.location }}</span>
     </div>
   </div>
 </template>
@@ -121,17 +120,59 @@ const handleDebug = (info) => {
   console.log(`[${info.time}] ${info.msg}`)
 }
 
-const takeScreenshot = () => {
+const takeScreenshot = async () => {
   let imageData = null
   if (playerRef.value && connectionState.value === 'connected') {
     imageData = playerRef.value.takeSnapshot()
   }
   
-  emit('screenshot', {
+  const screenshotInfo = {
     name: props.source.name,
+    id: props.source.id,
     time: new Date().toISOString(),
     image: imageData
+  }
+  
+  // 保存到后端
+  try {
+    if (imageData) {
+      await fetch('/api/screenshots', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          camera_name: props.source.name,
+          camera_id: props.source.id,
+          image_data: imageData
+        })
+      })
+    }
+  } catch (error) {
+    console.error('保存截图到服务器失败:', error)
+  }
+  
+  // 同时保存到本地存储
+  const savedScreenshots = localStorage.getItem('recentScreenshots')
+  let screenshots = savedScreenshots ? JSON.parse(savedScreenshots) : []
+  
+  screenshots.unshift({
+    id: Date.now().toString(),
+    url: imageData,
+    camera_name: props.source.name,
+    camera_id: props.source.id,
+    timestamp: screenshotInfo.time,
+    size: imageData ? imageData.length : 0
   })
+  
+  // 只保留最近50张
+  if (screenshots.length > 50) {
+    screenshots = screenshots.slice(0, 50)
+  }
+  
+  localStorage.setItem('recentScreenshots', JSON.stringify(screenshots))
+  
+  emit('screenshot', screenshotInfo)
 }
 
 watch(() => props.source.status, (newStatus) => {

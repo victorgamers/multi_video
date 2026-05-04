@@ -4,7 +4,7 @@
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
@@ -13,6 +13,13 @@ import json
 import asyncio
 import random
 import uuid
+import os
+import base64
+from pathlib import Path
+
+# 截图存储目录
+SCREENSHOTS_DIR = Path(__file__).parent / "screenshots"
+SCREENSHOTS_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(
     title="视频监控系统 API",
@@ -109,6 +116,17 @@ class LogEntry(BaseModel):
     message: str
     details: Optional[Dict[str, Any]] = None
 
+class Screenshot(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    filename: str
+    camera_name: str
+    camera_id: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
+    size: int = 0
+    width: Optional[int] = None
+    height: Optional[int] = None
+    thumbnail: Optional[str] = None
+
 class WebSocketMessage(BaseModel):
     type: str
     data: Dict[str, Any] = {}
@@ -157,6 +175,9 @@ class DataStore:
         
         # 日志
         self.logs: List[LogEntry] = []
+        
+        # 截图索引
+        self.screenshots: Dict[str, Screenshot] = {}
         
         # WebSocket 连接管理
         self.connections: Dict[str, WebSocket] = {}
@@ -537,6 +558,122 @@ async def clear_logs():
     count = len(data_store.logs)
     data_store.logs.clear()
     return {"success": True, "cleared": count}
+
+# ==================== 截图 API ====================
+@app.post("/api/screenshots")
+async def save_screenshot(
+    camera_name: str = Query(...),
+    camera_id: Optional[str] = Query(None),
+    image_data: str = Query(...)  # Base64编码的图片数据
+):
+    """保存截图"""
+    try:
+        # 解析Base64图片数据
+        if image_data.startswith('data:image/'):
+            # 移除 data:image/xxx;base64, 前缀
+            header, data = image_data.split(',', 1)
+            img_data = base64.b64decode(data)
+            # 从header中提取文件扩展名
+            ext = header.split(';')[0].split('/')[-1]
+        else:
+            img_data = base64.b64decode(image_data)
+            ext = 'png'
+        
+        # 生成文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}_{uuid.uuid4().hex[:8]}.{ext}"
+        filepath = SCREENSHOTS_DIR / filename
+        
+        # 保存文件
+        with open(filepath, 'wb') as f:
+            f.write(img_data)
+        
+        # 创建截图记录
+        screenshot = Screenshot(
+            filename=filename,
+            camera_name=camera_name,
+            camera_id=camera_id,
+            size=len(img_data),
+            timestamp=datetime.now()
+        )
+        data_store.screenshots[screenshot.id] = screenshot
+        
+        return {
+            "success": True,
+            "screenshot": screenshot.model_dump()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存截图失败: {str(e)}")
+
+@app.get("/api/screenshots")
+async def get_screenshots(
+    page: int = 1,
+    page_size: int = 20,
+    camera_id: Optional[str] = None,
+    camera_name: Optional[str] = None
+):
+    """获取截图列表"""
+    screenshots = list(data_store.screenshots.values())
+    
+    # 过滤
+    if camera_id:
+        screenshots = [s for s in screenshots if s.camera_id == camera_id]
+    if camera_name:
+        screenshots = [s for s in screenshots if camera_name in s.camera_name]
+    
+    # 按时间倒序
+    screenshots.sort(key=lambda x: x.timestamp, reverse=True)
+    
+    # 分页
+    total = len(screenshots)
+    start = (page - 1) * page_size
+    end = start + page_size
+    
+    # 转换数据，添加URL
+    result = []
+    for s in screenshots[start:end]:
+        s_dict = s.model_dump()
+        s_dict['url'] = f"/api/screenshots/{s.id}/file"
+        result.append(s_dict)
+    
+    return {
+        "screenshots": result,
+        "total": total,
+        "page": page,
+        "page_size": page_size
+    }
+
+@app.get("/api/screenshots/{screenshot_id}/file")
+async def get_screenshot_file(screenshot_id: str):
+    """获取截图文件"""
+    if screenshot_id not in data_store.screenshots:
+        raise HTTPException(status_code=404, detail="截图不存在")
+    
+    screenshot = data_store.screenshots[screenshot_id]
+    filepath = SCREENSHOTS_DIR / screenshot.filename
+    
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="截图文件不存在")
+    
+    return FileResponse(filepath)
+
+@app.delete("/api/screenshots/{screenshot_id}")
+async def delete_screenshot(screenshot_id: str):
+    """删除截图"""
+    if screenshot_id not in data_store.screenshots:
+        raise HTTPException(status_code=404, detail="截图不存在")
+    
+    screenshot = data_store.screenshots[screenshot_id]
+    filepath = SCREENSHOTS_DIR / screenshot.filename
+    
+    # 删除文件
+    if filepath.exists():
+        os.remove(filepath)
+    
+    # 删除记录
+    del data_store.screenshots[screenshot_id]
+    
+    return {"success": True}
 
 # ==================== 后台任务 - 模拟预警生成 ====================
 @app.on_event("startup")

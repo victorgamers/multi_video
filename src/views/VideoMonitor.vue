@@ -71,8 +71,12 @@
         <input v-model="newSource.name" type="text" class="input" placeholder="例如: 入口大门" />
       </div>
       <div class="form-group">
+        <label class="form-label">位置</label>
+        <input v-model="newSource.location" type="text" class="input" placeholder="例如: A区-1" />
+      </div>
+      <div class="form-group">
         <label class="form-label">WebRTC URL *</label>
-        <input v-model="newSource.url" type="text" class="input" placeholder="webrtc://192.168.0.101/live/0" />
+        <input v-model="newSource.webrtc_url" type="text" class="input" placeholder="webrtc://192.168.0.101/live/0" />
         <p class="form-hint">
           ZLMediaKit 格式: <code>webrtc://服务器IP:端口/live/流名称</code>
         </p>
@@ -80,7 +84,7 @@
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">ZLM 主机</label>
-          <input v-model="newSource.zlmHost" type="text" class="input" placeholder="192.168.0.101" />
+          <input v-model="newSource.zlmHost" type="text" class="input" placeholder="192.168.0.102" />
         </div>
         <div class="form-group">
           <label class="form-label">ZLM 端口</label>
@@ -91,26 +95,6 @@
         <label class="form-label">ZLM 密钥 (可选)</label>
         <input v-model="newSource.zlmSecret" type="password" class="input" placeholder="留空则不使用密钥" />
         <p class="form-hint">在 ZLM 配置文件中设置的 WebAPI 密钥</p>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">分辨率</label>
-          <select v-model="newSource.resolution" class="select">
-            <option value="720p">720p</option>
-            <option value="1080p">1080p</option>
-            <option value="2K">2K</option>
-            <option value="4K">4K</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">帧率 (fps)</label>
-          <select v-model="newSource.fps" class="select">
-            <option value="15">15 fps</option>
-            <option value="25">25 fps</option>
-            <option value="30">30 fps</option>
-            <option value="60">60 fps</option>
-          </select>
-        </div>
       </div>
       <template #footer>
         <button class="btn btn-secondary" @click="showAddModal = false">取消</button>
@@ -164,12 +148,17 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useVideoStore } from '../stores/video'
 import VideoCard from '../components/video/VideoCard.vue'
 import FormModal from '../components/common/FormModal.vue'
 
 const videoStore = useVideoStore()
+
+// 挂载时从后端加载视频源
+onMounted(() => {
+  videoStore.fetchVideos()
+})
 
 const showAddModal = ref(false)
 const showDetailModal = ref(false)
@@ -185,9 +174,8 @@ const layouts = [
 
 const newSource = ref({
   name: '',
-  url: '',
-  resolution: '1080p',
-  fps: 30,
+  location: '',
+  webrtc_url: '',
   type: 'webrtc',
   zlmHost: '192.168.0.101',
   zlmPort: 80,
@@ -195,7 +183,7 @@ const newSource = ref({
 })
 
 const canAdd = computed(() => {
-  return newSource.value.name.trim() && newSource.value.url.trim()
+  return newSource.value.name.trim() && newSource.value.webrtc_url.trim()
 })
 
 const handleAddSource = () => {
@@ -204,9 +192,8 @@ const handleAddSource = () => {
   videoStore.addSource({ ...newSource.value })
   newSource.value = {
     name: '',
-    url: '',
-    resolution: '1080p',
-    fps: 30,
+    location: '',
+    webrtc_url: '',
     type: 'webrtc',
     zlmHost: '192.168.0.101',
     zlmPort: 80,

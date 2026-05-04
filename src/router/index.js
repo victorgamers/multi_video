@@ -5,6 +5,8 @@ import Strategy from '../views/Strategy.vue'
 import Alarm from '../views/Alarm.vue'
 import UserManage from '../views/UserManage.vue'
 import LogMonitor from '../views/LogMonitor.vue'
+import Multimodal from '../views/Multimodal.vue'
+import ScreenshotList from '../views/ScreenshotList.vue'
 
 const routes = [
   {
@@ -32,6 +34,11 @@ const routes = [
     component: Alarm
   },
   {
+    path: '/multimodal',
+    name: 'Multimodal',
+    component: Multimodal
+  },
+  {
     path: '/users',
     name: 'UserManage',
     component: UserManage
@@ -40,6 +47,11 @@ const routes = [
     path: '/logs',
     name: 'LogMonitor',
     component: LogMonitor
+  },
+  {
+    path: '/screenshots',
+    name: 'ScreenshotList',
+    component: ScreenshotList
   }
 ]
 

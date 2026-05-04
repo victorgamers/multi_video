@@ -204,7 +204,7 @@ const previewSources = computed(() => videoStore.sources.slice(0, 4))
 
 // 从 URL 中提取主机地址
 const getHostFromUrl = (url) => {
-  if (!url) return '192.168.0.101'
+  if (!url) return '192.168.0.102'
   const match = url.match(/webrtc:\/\/([^/:]+)/)
   return match ? match[1] : '192.168.0.101'
 }
@@ -219,7 +219,8 @@ const rk3588Stats = ref({
   memoryFree: 0
 })
 
-const API_BASE = '/api'
+// 使用相对路径，通过 Vite 代理转发到后端 (避免 CORS)
+const API_BASE = ''
 const circumference = 2 * Math.PI * 52
 
 const memoryOffset = computed(() => {
@@ -263,6 +264,7 @@ const fetchRK3588Stats = async () => {
 }
 
 onMounted(() => {
+  videoStore.fetchVideos()
   fetchRK3588Stats()
   statsInterval = setInterval(fetchRK3588Stats, 1000)
 })

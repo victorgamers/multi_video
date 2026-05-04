@@ -180,11 +180,16 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useUserStore } from '../stores/user'
 import FormModal from '../components/common/FormModal.vue'
 
 const userStore = useUserStore()
+
+// 挂载时从后端加载用户
+onMounted(() => {
+  userStore.fetchUsers()
+})
 
 const showModal = ref(false)
 const isEditing = ref(false)

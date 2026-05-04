@@ -51,7 +51,7 @@ const props = defineProps({
   },
   zlmHost: {
     type: String,
-    default: '192.168.0.101'
+    default: '192.168.0.102'
   },
   zlmPort: {
     type: Number,
@@ -261,9 +261,12 @@ const connect = async () => {
 const tryWebSocketMode = (pc, parsed) => {
   return new Promise((resolve) => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsHost = parsed.host.includes(':') ? parsed.host : `${parsed.host}:${parsed.port}`
+    // 重要：ZLM HTTP API 端口不同于 RTSP 端口，使用 zlmPort 而不是 parsed.port
+    const wsHost = props.zlmHost || parsed.host
+    const wsPort = props.zlmPort || 80
+    const wsHostWithPort = `${wsHost}:${wsPort}`
     const secretParam = props.zlmSecret ? `&secret=${props.zlmSecret}` : ''
-    const wsUrl = `${protocol}//${wsHost}/index/api/webrtc?app=${parsed.app}&stream=${parsed.stream}&type=play${secretParam}`
+    const wsUrl = `${protocol}//${wsHostWithPort}/index/api/webrtc?app=${parsed.app}&stream=${parsed.stream}&type=play${secretParam}`
     
     log(`[WS模式] 连接: ${wsUrl}`)
     
@@ -350,7 +353,10 @@ const tryWebSocketMode = (pc, parsed) => {
 // HTTP 方式连接 ZLM
 const tryHttpMode = async (pc, parsed) => {
   const secretParam = props.zlmSecret ? `&secret=${props.zlmSecret}` : ''
-  const apiUrl = `http://${parsed.host}:${parsed.port}/index/api/webrtc?app=${parsed.app}&stream=${parsed.stream}&type=play${secretParam}`
+  // 重要：使用 zlmHost 和 zlmPort 而不是 parsed.host 和 parsed.port
+  const host = props.zlmHost || parsed.host
+  const port = props.zlmPort || 80
+  const apiUrl = `http://${host}:${port}/index/api/webrtc?app=${parsed.app}&stream=${parsed.stream}&type=play${secretParam}`
   
   log(`[HTTP模式] 请求: ${apiUrl}`)
   

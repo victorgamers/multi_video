@@ -4,13 +4,20 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
-    port: 5173,
+    port: 5174,
     host: true,
     proxy: {
-      '/api': {
+      '/video': {
         target: 'http://192.168.0.101:5000',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        changeOrigin: true
+      },
+      '/user': {
+        target: 'http://192.168.0.101:5000',
+        changeOrigin: true
+      },
+      '/minor': {
+        target: 'http://192.168.0.101:5000',
+        changeOrigin: true
       }
     }
   }
