@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <title>RK3588 AI 终端测试</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .log-area {
+            height: 500px;
+            overflow-y: auto;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .user-msg {
+            color: #60a5fa;
+        }
+
+        .ai-msg {
+            color: #34d399;
+        }
+
+        .system-msg {
+            color: #94a3b8;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-gray-100 p-6">
+    <div class="max-w-4xl mx-auto">
+        <header class="mb-6 flex justify-between items-center border-b border-gray-700 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold">AI Vision Deployment Terminal</h1>
+                <p class="text-sm text-gray-400">Status: <span id="ws-status" class="text-red-500">Disconnected</span>
+                </p>
+            </div>
+            <div class="text-right">
+                <p class="text-xs text-gray-500">Client ID: <span id="client-id" class="text-blue-400">N/A</span></p>
+            </div>
+        </header>
+
+        <main class="space-y-4">
+            <!-- 日志/对话显示区 -->
+            <div id="log" class="log-area bg-black p-4 rounded border border-gray-700 text-sm">
+                <div class="system-msg">[System] Waiting for connection...</div>
+            </div>
+
+            <!-- 输入区 -->
+            <div class="flex gap-2">
+                <input type="text" id="prompt-input"
+                    class="flex-1 bg-gray-800 border border-gray-600 rounded px-4 py-2 focus:outline-none focus:border-blue-500"
+                    placeholder="输入 Prompt 并发送 (Action: chat, SubAction: prompt)...">
+                <button onclick="sendPrompt()" id="send-btn"
+                    class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded font-semibold transition">
+                    发送
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let ws;
+        const logDiv = document.getElementById('log');
+        const statusSpan = document.getElementById('ws-status');
+        const clientIdSpan = document.getElementById('client-id');
+        const input = document.getElementById('prompt-input');
+
+        // 初始化连接
+        function initWebSocket() {
+            // 根据你的 FastAPI 路由，连接到 /ws
+            const protocol = 'ws:';
+            const wsUrl = `${protocol}//192.168.0.101:5000/ws`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                statusSpan.innerText = 'Connected';
+                statusSpan.className = 'text-green-500';
+                addLog('System', 'WebSocket connection established.', 'system-msg');
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+
+                // 处理后端连接成功后的初始化消息
+                if (message.action === 'connected') {
+                    clientIdSpan.innerText = message.data.client_id;
+                    addLog('System', `Server assigned ID: ${message.data.client_id}`, 'system-msg');
+                }
+                // 处理 LLM 推理结果 (假设 llm_chat_ws 通过 send_json 或 send_text 返回)
+                else {
+                    // 如果返回的是纯文本流，或者是包装后的 JSON
+                    const content = typeof message === 'string' ? message : JSON.stringify(message);
+                    addLog('AI', content, 'ai-msg');
+                }
+            };
+
+            ws.onclose = () => {
+                statusSpan.innerText = 'Disconnected';
+                statusSpan.className = 'text-red-500';
+                addLog('System', 'Connection closed. Retrying in 3s...', 'system-msg');
+                setTimeout(initWebSocket, 3000);
+            };
+
+            ws.onerror = (error) => {
+                addLog('Error', 'WebSocket error occurred.', 'text-red-400');
+            };
+        }
+
+        function sendPrompt() {
+            const prompt = input.value.trim();
+            if (!prompt || ws.readyState !== WebSocket.OPEN) return;
+
+            // 构造符合后端 handle_websocket_message 要求的 Message 对象
+            const payload = {
+                action: "chat",
+                subAction: "prompt",
+                data: {
+                    "role":"user",
+                    "prompt":prompt
+                }
+            };
+
+            ws.send(JSON.stringify(payload));
+            addLog('User', prompt, 'user-msg');
+            input.value = '';
+        }
+
+        function addLog(sender, text, className) {
+            const entry = document.createElement('div');
+            entry.className = 'mb-1';
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="text-gray-600">[${time}]</span> <span class="${className}">[${sender}]</span> ${text}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // 监听回车
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendPrompt();
+        });
+
+        // 启动
+        initWebSocket();
+    </script>
+</body>
+
+</html>

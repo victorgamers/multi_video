@@ -1,8 +1,37 @@
 <template>
   <div class="page multimodal">
     <div class="page-header">
-      <h1 class="page-title">多模态分析</h1>
-      <p class="page-subtitle">截图识别与智能分析</p>
+      <div class="header-left">
+        <h1 class="page-title">多模态分析</h1>
+        <p class="page-subtitle">RK3588 终端 - 192.168.0.101:5000</p>
+      </div>
+      <div class="header-right">
+        <div class="model-selector">
+          <select v-model="selectedVisionModel" class="model-select" :disabled="chatStore.runningMultiModel">
+            <option value="">选择本地模型</option>
+            <option value="Qwen2-VL-2B">Qwen2-VL-2B</option>
+            <option value="DeepSeek-OCR">DeepSeek-OCR</option>
+          </select>
+          <button 
+            class="btn btn-success btn-sm" 
+            @click="startModel"
+            :disabled="!selectedVisionModel || chatStore.runningMultiModel"
+          >
+            启动
+          </button>
+          <button 
+            class="btn btn-danger btn-sm" 
+            @click="stopModel"
+            :disabled="!chatStore.runningMultiModel"
+          >
+            停止
+          </button>
+        </div>
+        <div class="connection-status" :class="{ connected: chatStore.wsConnected }">
+          <span class="status-dot"></span>
+          {{ chatStore.wsConnected ? '已连接' : '未连接' }}
+        </div>
+      </div>
     </div>
 
     <div class="multimodal-container">
@@ -174,12 +203,12 @@
       <div class="analysis-panel">
         <div class="panel-header">
           <h3>智能分析</h3>
-          <div class="model-select">
-            <select v-model="selectedModel" class="select">
-              <option value="vision">视觉模型</option>
-              <option value="qwen-vl">通义千问 VL</option>
-              <option value="claude">Claude Vision</option>
-            </select>
+          <div v-if="chatStore.runningMultiModel" class="current-model-badge">
+            <span class="model-running-dot"></span>
+            {{ chatStore.currentMultiModel }}
+          </div>
+          <div v-else class="model-warning">
+            请先启动本地模型
           </div>
         </div>
 
@@ -213,15 +242,27 @@
         <div class="result-section">
           <div class="result-header">
             <h4>分析结果</h4>
-            <button v-if="result" class="btn-icon" @click="copyResult" title="复制结果">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-            </button>
+            <div class="result-actions">
+              <button v-if="result" class="btn-icon" @click="copyResult" title="复制结果">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+              </button>
+              <button v-if="isStreaming" class="btn-icon btn-stop" @click="stopStreaming" title="停止生成">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="6" y="6" width="12" height="12" rx="2"/>
+                </svg>
+              </button>
+            </div>
           </div>
           
-          <div v-if="loading" class="result-loading">
+          <div v-if="isStreaming" class="result-content">
+            <pre class="result-text" ref="resultTextRef">{{ result }}<span class="streaming-cursor">|</span></pre>
+            <span class="stream-indicator">流式输出中...</span>
+          </div>
+          
+          <div v-else-if="loading" class="result-loading">
             <div class="loading-dots">
               <span></span>
               <span></span>
@@ -240,7 +281,13 @@
           </div>
           
           <div v-else-if="result" class="result-content">
-            <pre class="result-text">{{ result }}</pre>
+            <pre class="result-text" ref="resultTextRef">{{ result }}</pre>
+            <div v-if="isStreamingComplete" class="stream-complete">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <span>分析完成</span>
+            </div>
           </div>
           
           <div v-else class="result-empty">
@@ -282,23 +329,49 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useVideoStore } from '../stores/video'
+import { useChatStore } from '../stores/chat'
 
 const videoStore = useVideoStore()
+const chatStore = useChatStore()
 
 const fileInput = ref(null)
 const previewUrl = ref('')
 const imageFile = ref(null)
 const prompt = ref('')
-const selectedModel = ref('vision')
+const selectedVisionModel = ref('')
 const result = ref('')
 const loading = ref(false)
 const error = ref('')
+const isStreaming = ref(false)
+const isStreamingComplete = ref(false)
+const resultTextRef = ref(null)
 const isDragging = ref(false)
 const showHistory = ref(false)
 const recentScreenshots = ref([])
 const history = ref([])
+
+// 多模态推理 WebSocket
+let multiWs = null
+
+// 监听运行中的模型，同步下拉框显示
+watch(() => chatStore.runningMultiModel, (newModel) => {
+  console.log('watch multimodal model, newModel:', newModel)
+  selectedVisionModel.value = newModel || ''
+})
+
+// 启动模型
+const startModel = () => {
+  if (selectedVisionModel.value) {
+    chatStore.startModel(selectedVisionModel.value, 'multi')
+  }
+}
+
+// 停止模型
+const stopModel = () => {
+  chatStore.stopModel('multi')
+}
 
 // 截图选择相关
 const inputMode = ref('upload')
@@ -314,7 +387,7 @@ const totalScreenshots = computed(() => screenshotTotal.value || recentScreensho
 const screenshotTotalPages = computed(() => Math.ceil(screenshotTotal.value / screenshotPageSize.value) || 1)
 
 const canAnalyze = computed(() => {
-  return previewUrl.value && prompt.value.trim()
+  return previewUrl.value && prompt.value.trim() && chatStore.runningMultiModel
 })
 
 const triggerUpload = () => {
@@ -415,31 +488,33 @@ const selectScreenshot = (shot) => {
 }
 
 const analyzeImage = async () => {
-  if (!canAnalyze.value) return
+  if (!canAnalyze.value) {
+    if (!chatStore.runningMultiModel) {
+      error.value = '请先启动本地模型'
+    }
+    return
+  }
   
   loading.value = true
   error.value = ''
   result.value = ''
+  isStreaming.value = true
+  isStreamingComplete.value = false
 
   try {
-    // 构建请求数据
-    const requestData = {
-      image: previewUrl.value,
-      prompt: prompt.value,
-      model: selectedModel.value
-    }
+    // 构建 FormData 用于文件上传
+    const formData = new FormData()
+    formData.append('file', imageFile.value)
+    formData.append('prompt', prompt.value)
 
-    // 调用后端 API
-    const response = await fetch('/api/multimodal/analyze', {
+    // 1. 调用多模态推理接口
+    const response = await fetch('http://192.168.0.101:5000/multi/inference', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestData)
+      body: formData
     })
 
     if (!response.ok) {
-      throw new Error(`请求失败: ${response.status}`)
+      throw new Error(`推理请求失败: ${response.status}`)
     }
 
     const data = await response.json()
@@ -448,26 +523,110 @@ const analyzeImage = async () => {
       throw new Error(data.error)
     }
 
-    result.value = data.result || data.response || JSON.stringify(data, null, 2)
+    const taskId = data.task_id
+    if (!taskId) {
+      throw new Error('未获取到任务ID')
+    }
 
-    // 保存到历史记录
-    const historyItem = {
-      image: previewUrl.value,
-      prompt: prompt.value,
-      result: result.value,
-      time: new Date().toISOString()
+    console.log('获取到任务ID:', taskId)
+
+    // 2. 连接 WebSocket 获取流式输出
+    const wsUrl = `ws://192.168.0.101:5000/ws/${taskId}`
+    multiWs = new WebSocket(wsUrl)
+
+    multiWs.onopen = () => {
+      console.log('多模态 WebSocket 已连接')
     }
-    history.value.unshift(historyItem)
-    if (history.value.length > 20) {
-      history.value = history.value.slice(0, 20)
+
+    multiWs.onmessage = (event) => {
+      console.log('收到 WebSocket 消息:', event.data)
+      try {
+        const msg = JSON.parse(event.data)
+        console.log('解析后的消息:', msg)
+        
+        if (msg.error) {
+          throw new Error(msg.error)
+        }
+        
+        // 累加文本内容（支持多种字段名）
+        const content = msg.content || msg.text || msg.token || msg.delta || msg.message
+        if (content) {
+          result.value += content
+          scrollToBottom()
+        }
+        
+        // 完成信号
+        if (msg.done || msg.complete || msg.finished) {
+          isStreaming.value = false
+          isStreamingComplete.value = true
+          multiWs.close()
+          loading.value = false
+          
+          // 保存到历史记录
+          saveToHistory()
+        }
+      } catch (parseErr) {
+        console.log('非 JSON 消息，当作纯文本处理:', event.data)
+        // 如果不是 JSON，当作纯文本处理
+        if (event.data) {
+          result.value += event.data
+          scrollToBottom()
+        }
+      }
     }
-    localStorage.setItem('multimodalHistory', JSON.stringify(history.value))
+
+    multiWs.onerror = (err) => {
+      console.error('多模态 WebSocket 错误:', err)
+      error.value = 'WebSocket 连接错误'
+      isStreaming.value = false
+      loading.value = false
+    }
+
+    multiWs.onclose = (event) => {
+      console.log('多模态 WebSocket 已关闭', event.code)
+      if (isStreaming.value && !isStreamingComplete.value) {
+        isStreaming.value = false
+        loading.value = false
+      }
+    }
 
   } catch (err) {
     console.error('分析失败:', err)
     error.value = err.message || '分析失败，请重试'
-  } finally {
+    isStreaming.value = false
     loading.value = false
+  }
+}
+
+// 保存到历史记录
+const saveToHistory = () => {
+  const historyItem = {
+    image: previewUrl.value,
+    prompt: prompt.value,
+    result: result.value,
+    time: new Date().toISOString()
+  }
+  history.value.unshift(historyItem)
+  if (history.value.length > 20) {
+    history.value = history.value.slice(0, 20)
+  }
+  localStorage.setItem('multimodalHistory', JSON.stringify(history.value))
+}
+
+// 停止流式输出
+const stopStreaming = () => {
+  if (multiWs) {
+    multiWs.close()
+    multiWs = null
+  }
+  isStreaming.value = false
+  loading.value = false
+}
+
+// 滚动到结果底部
+const scrollToBottom = () => {
+  if (resultTextRef.value) {
+    resultTextRef.value.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }
 }
 
@@ -507,6 +666,16 @@ onMounted(async () => {
     }
   }
 
+  // 查询当前运行的多模态模型（等待完成）
+  await chatStore.fetchCurrentModel('1')
+  // 同步下拉框
+  selectedVisionModel.value = chatStore.runningMultiModel || ''
+  
+  // 连接 WebSocket
+  chatStore.connectWebSocket().catch(err => {
+    console.error('WebSocket 连接失败:', err)
+  })
+
   // 加载最近截图（用于快速选择）
   const savedScreenshots = localStorage.getItem('recentScreenshots')
   if (savedScreenshots) {
@@ -526,6 +695,115 @@ onMounted(async () => {
 .multimodal {
   max-width: 1400px;
   margin: 0 auto;
+}
+
+/* Page Header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.header-left {
+  flex: 1;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.model-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-select {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+
+.model-select:focus {
+  border-color: var(--accent-primary);
+}
+
+.model-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 6px 12px;
+  border-radius: 20px;
+}
+
+.connection-status.connected {
+  color: #22c55e;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+
+.connection-status.connected .status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+/* Current Model Badge */
+.current-model-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(34, 197, 94, 0.1);
+  border-radius: 20px;
+  font-size: 13px;
+  color: #22c55e;
+}
+
+.model-running-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px #22c55e; }
+  50% { opacity: 0.6; box-shadow: 0 0 2px #22c55e; }
+}
+
+.model-warning {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  border-radius: 20px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
 }
 
 .multimodal-container {
@@ -967,6 +1245,11 @@ onMounted(async () => {
   font-weight: 500;
 }
 
+.result-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .btn-icon {
   padding: 6px;
   background: transparent;
@@ -980,6 +1263,11 @@ onMounted(async () => {
 .btn-icon:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.btn-icon.btn-stop:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
 }
 
 .btn-icon svg {
@@ -1035,6 +1323,8 @@ onMounted(async () => {
   flex: 1;
   padding: 16px;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .result-text {
@@ -1045,6 +1335,58 @@ onMounted(async () => {
   color: var(--text-primary);
   font-family: inherit;
   margin: 0;
+  flex: 1;
+}
+
+.stream-indicator {
+  font-size: 12px;
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stream-indicator::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.streaming-cursor {
+  animation: blink 0.8s infinite;
+  color: var(--accent-primary);
+  font-weight: bold;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.stream-complete {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(34, 197, 94, 0.1);
+  border-radius: 6px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #22c55e;
+}
+
+.stream-complete svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* 历史记录 */

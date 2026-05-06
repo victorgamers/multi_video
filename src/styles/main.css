@@ -127,6 +127,14 @@ body {
   border-radius: 6px;
 }
 
+/* 按钮禁用状态 */
+.btn:disabled,
+button:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
 /* 表单元素 */
 .input {
   width: 100%;

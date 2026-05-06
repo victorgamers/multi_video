@@ -149,6 +149,14 @@ const MultimodalIcon = {
   }
 }
 
+const AIChatIcon = {
+  render() {
+    return h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2' }, [
+      h('path', { d: 'M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3m9 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3' })
+    ])
+  }
+}
+
 const ScreenshotIcon = {
   render() {
     return h('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2' }, [
@@ -165,6 +173,7 @@ const navLinks = [
   { path: '/screenshots', label: '截图列表', icon: ScreenshotIcon },
   { path: '/strategy', label: '策略配置', icon: StrategyIcon },
   { path: '/alarm', label: '预警管理', icon: AlarmIcon },
+  { path: '/ai-chat', label: 'AI 对话', icon: AIChatIcon },
   { path: '/multimodal', label: '多模态', icon: MultimodalIcon },
   { path: '/logs', label: '日志监控', icon: LogIcon },
   { path: '/users', label: '用户管理', icon: UsersIcon }

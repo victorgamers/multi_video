@@ -7,6 +7,7 @@ import UserManage from '../views/UserManage.vue'
 import LogMonitor from '../views/LogMonitor.vue'
 import Multimodal from '../views/Multimodal.vue'
 import ScreenshotList from '../views/ScreenshotList.vue'
+import AIChat from '../views/AIChat.vue'
 
 const routes = [
   {
@@ -52,6 +53,11 @@ const routes = [
     path: '/screenshots',
     name: 'ScreenshotList',
     component: ScreenshotList
+  },
+  {
+    path: '/ai-chat',
+    name: 'AIChat',
+    component: AIChat
   }
 ]
 
