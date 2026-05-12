@@ -58,9 +58,8 @@ export const useChatStore = defineStore('chat', () => {
   
   // 模型名称映射：前端ID -> 后端名称
   const modelNameMap = {
-    'DeepSeek-R1': 'DeepSeek-R1',
     'DeepSeek-R1-Distill-Qwen-7B': 'DeepSeek-R1-Distill-Qwen-7B',
-    'Tiny-1.1B': 'Tiny-1.1B',
+    'TinyLlama-1.1B': 'TinyLlama-1.1B',
     'Qwen2-VL-2B': 'Qwen2-VL-2B',
     'DeepSeek-OCR': 'DeepSeek-OCR'
   }
@@ -124,9 +123,8 @@ export const useChatStore = defineStore('chat', () => {
         if (data.model) {
           // 反向映射：后端模型名称 -> 前端模型 ID（统一大写格式）
           const reverseMap = {
-            'DeepSeek-R1': 'DeepSeek-R1',
             'DeepSeek-R1-Distill-Qwen-7B': 'DeepSeek-R1-Distill-Qwen-7B',
-            'Tiny-1.1B': 'Tiny-1.1B',
+            'TinyLlama-1.1B': 'TinyLlama-1.1B',
             'Qwen2-VL-2B': 'Qwen2-VL-2B',
             'DeepSeek-OCR': 'DeepSeek-OCR'
           }

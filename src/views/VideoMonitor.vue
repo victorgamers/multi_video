@@ -96,6 +96,51 @@
         <input v-model="newSource.zlmSecret" type="password" class="input" placeholder="留空则不使用密钥" />
         <p class="form-hint">在 ZLM 配置文件中设置的 WebAPI 密钥</p>
       </div>
+      
+      <!-- AI检测配置 -->
+      <div class="form-section ai-config-section">
+        <div class="form-section-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <span>AI检测配置</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">检测模型</label>
+            <select v-model="newSource.yoloModel" class="select">
+              <option v-for="model in strategyStore.yoloModels" :key="model.value" :value="model.value">
+                {{ model.label }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">检测目标</label>
+            <select v-model="newSource.yoloClass" class="select">
+              <option v-for="cls in strategyStore.yoloClasses" :key="cls.value" :value="cls.value">
+                {{ cls.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">置信度阈值</label>
+          <div class="confidence-slider">
+            <input 
+              v-model.number="newSource.confidence" 
+              type="range" 
+              min="0.1" 
+              max="0.95" 
+              step="0.05" 
+              class="slider"
+            />
+            <span class="confidence-value">{{ Math.round(newSource.confidence * 100) }}%</span>
+          </div>
+        </div>
+      </div>
+      
       <template #footer>
         <button class="btn btn-secondary" @click="showAddModal = false">取消</button>
         <button class="btn btn-primary" @click="handleAddSource" :disabled="!canAdd">添加</button>
@@ -127,6 +172,65 @@
           <span class="detail-label">视频类型</span>
           <span class="detail-value">WebRTC</span>
         </div>
+        
+        <!-- AI检测配置显示 -->
+        <div class="detail-section-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          AI检测配置
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">检测模型</span>
+          <span class="detail-value ai-model">{{ getYoloModelLabel(selectedSource.id) }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">检测目标</span>
+          <span class="detail-value">{{ getYoloClassLabel(selectedSource.id) }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">置信度</span>
+          <span class="detail-value confidence">{{ Math.round(getVideoConfidence(selectedSource.id) * 100) }}%</span>
+        </div>
+        
+        <!-- 编辑AI配置 -->
+        <div class="edit-ai-config">
+          <div class="form-label">修改AI配置</div>
+          <div class="form-row">
+            <div class="form-group">
+              <select v-model="editAIConfig.yoloModel" class="select">
+                <option v-for="model in strategyStore.yoloModels" :key="model.value" :value="model.value">
+                  {{ model.label }}
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
+              <select v-model="editAIConfig.yoloClass" class="select">
+                <option v-for="cls in strategyStore.yoloClasses" :key="cls.value" :value="cls.value">
+                  {{ cls.label }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="confidence-slider">
+              <input 
+                v-model.number="editAIConfig.confidence" 
+                type="range" 
+                min="0.1" 
+                max="0.95" 
+                step="0.05" 
+                class="slider"
+              />
+              <span class="confidence-value">{{ Math.round(editAIConfig.confidence * 100) }}%</span>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" @click="saveAIConfig">
+            保存AI配置
+          </button>
+        </div>
       </div>
       <template #footer>
         <button class="btn btn-danger" @click="handleDelete">删除</button>
@@ -150,10 +254,12 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useVideoStore } from '../stores/video'
+import { useStrategyStore } from '../stores/strategy'
 import VideoCard from '../components/video/VideoCard.vue'
 import FormModal from '../components/common/FormModal.vue'
 
 const videoStore = useVideoStore()
+const strategyStore = useStrategyStore()
 
 // 挂载时从后端加载视频源
 onMounted(() => {
@@ -164,6 +270,40 @@ const showAddModal = ref(false)
 const showDetailModal = ref(false)
 const selectedSource = ref(null)
 const showToast = ref(false)
+
+// 编辑AI配置
+const editAIConfig = ref({
+  yoloModel: 'yolov8',
+  yoloClass: 'all',
+  confidence: 0.5
+})
+
+const getYoloModelLabel = (videoId) => {
+  const config = videoStore.getVideoAIConfig(videoId)
+  const found = strategyStore.yoloModels.find(m => m.value === config.yoloModel)
+  return found ? found.label : 'YOLOv8'
+}
+
+const getYoloClassLabel = (videoId) => {
+  const config = videoStore.getVideoAIConfig(videoId)
+  const found = strategyStore.yoloClasses.find(c => c.value === config.yoloClass)
+  return found ? found.label : '检测所有目标'
+}
+
+const getVideoConfidence = (videoId) => {
+  const config = videoStore.getVideoAIConfig(videoId)
+  return config.confidence
+}
+
+const saveAIConfig = () => {
+  if (selectedSource.value) {
+    videoStore.updateVideoAIConfig(selectedSource.value.id, { ...editAIConfig.value })
+    showToast.value = true
+    setTimeout(() => {
+      showToast.value = false
+    }, 2000)
+  }
+}
 
 const layouts = [
   { value: '1', label: '单画面' },
@@ -179,7 +319,11 @@ const newSource = ref({
   type: 'webrtc',
   zlmHost: '192.168.0.101',
   zlmPort: 80,
-  zlmSecret: ''
+  zlmSecret: '',
+  // AI配置
+  yoloModel: 'yolov8',
+  yoloClass: 'all',
+  confidence: 0.5
 })
 
 const canAdd = computed(() => {
@@ -189,7 +333,23 @@ const canAdd = computed(() => {
 const handleAddSource = () => {
   if (!canAdd.value) return
   
-  videoStore.addSource({ ...newSource.value })
+  const sourceData = { ...newSource.value }
+  const aiConfig = {
+    yoloModel: sourceData.yoloModel,
+    yoloClass: sourceData.yoloClass,
+    confidence: sourceData.confidence
+  }
+  
+  videoStore.addSource({ ...sourceData })
+  
+  // 保存AI配置（需要等视频源添加后获取ID）
+  setTimeout(() => {
+    const addedSource = videoStore.sources[videoStore.sources.length - 1]
+    if (addedSource) {
+      videoStore.updateVideoAIConfig(addedSource.id, aiConfig)
+    }
+  }, 100)
+  
   newSource.value = {
     name: '',
     location: '',
@@ -197,7 +357,10 @@ const handleAddSource = () => {
     type: 'webrtc',
     zlmHost: '192.168.0.101',
     zlmPort: 80,
-    zlmSecret: ''
+    zlmSecret: '',
+    yoloModel: 'yolov8',
+    yoloClass: 'all',
+    confidence: 0.5
   }
   showAddModal.value = false
 }
@@ -208,6 +371,9 @@ const handleFullscreen = (source) => {
 
 const handleDetail = (source) => {
   selectedSource.value = source
+  // 加载当前AI配置
+  const aiConfig = videoStore.getVideoAIConfig(source.id)
+  editAIConfig.value = { ...aiConfig }
   showDetailModal.value = true
 }
 
@@ -378,6 +544,60 @@ if (savedLayout) {
   gap: 16px;
 }
 
+.form-section {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(168, 85, 247, 0.05);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 8px;
+}
+
+.form-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #a855f7;
+}
+
+.ai-config-section .form-group {
+  margin-bottom: 12px;
+}
+
+.confidence-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.slider {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  outline: none;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #a855f7;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.confidence-value {
+  min-width: 45px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #a855f7;
+  text-align: right;
+}
+
 .source-detail {
   display: flex;
   flex-direction: column;
@@ -400,6 +620,53 @@ if (savedLayout) {
 .detail-value {
   font-size: 14px;
   word-break: break-all;
+}
+
+.detail-value.ai-model {
+  color: #a855f7;
+  font-weight: 500;
+}
+
+.detail-value.confidence {
+  color: #a855f7;
+  font-weight: 600;
+}
+
+.detail-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 20px 0 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  color: #a855f7;
+}
+
+.edit-ai-config {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(168, 85, 247, 0.05);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 8px;
+}
+
+.edit-ai-config .form-label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.edit-ai-config .form-row {
+  margin-bottom: 12px;
+}
+
+.edit-ai-config .btn-sm {
+  padding: 6px 16px;
+  font-size: 12px;
 }
 
 code.detail-value {

@@ -29,6 +29,45 @@
         <span class="stat-label">已禁用</span>
       </div>
     </div>
+
+    <!-- 全局AI检测设置 -->
+    <div class="global-ai-settings">
+      <div class="settings-header">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          全局AI检测设置
+        </h3>
+        <span class="settings-tip">适用于所有AI目标检测策略的默认值</span>
+      </div>
+      <div class="settings-row">
+        <div class="setting-item">
+          <label>默认检测模型</label>
+          <select v-model="globalSettings.defaultModel" class="select" @change="updateGlobalSettings">
+            <option v-for="model in strategyStore.yoloModels" :key="model.value" :value="model.value">
+              {{ model.label }}
+            </option>
+          </select>
+        </div>
+        <div class="setting-item">
+          <label>默认置信度</label>
+          <div class="confidence-slider">
+            <input 
+              v-model.number="globalSettings.confidence" 
+              type="range" 
+              min="0.1" 
+              max="0.95" 
+              step="0.05" 
+              class="slider"
+            />
+            <span class="confidence-value">{{ Math.round(globalSettings.confidence * 100) }}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
     
     <!-- 策略列表 -->
     <div class="strategy-list">
@@ -46,6 +85,11 @@
             <svg v-else-if="strategy.type === 'offline'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="1" y1="1" x2="23" y2="23"/>
               <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34"/>
+            </svg>
+            <svg v-else-if="strategy.type === 'yolo'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
             </svg>
             <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -74,21 +118,46 @@
         
         <div class="strategy-body">
           <div class="strategy-params">
-            <div class="param-item">
-              <span class="param-label">敏感度</span>
-              <div class="sensitivity-bar">
-                <div class="sensitivity-fill" :class="strategy.sensitivity" :style="{ width: sensitivityWidth(strategy.sensitivity) }"></div>
+            <!-- AI目标检测策略配置 -->
+            <template v-if="strategy.type === 'yolo'">
+              <div class="param-item">
+                <span class="param-label">检测模型</span>
+                <span class="param-value">{{ getYoloModelLabel(strategy.yoloModel) }}</span>
               </div>
-              <span class="param-value">{{ sensitivityLabel(strategy.sensitivity) }}</span>
-            </div>
-            <div class="param-item">
-              <span class="param-label">预警级别</span>
-              <span class="badge" :class="levelBadge(strategy.level)">{{ levelLabel(strategy.level) }}</span>
-            </div>
-            <div class="param-item">
-              <span class="param-label">关联摄像头</span>
-              <span class="param-value">{{ strategy.cameraIds.length }} 个</span>
-            </div>
+              <div class="param-item">
+                <span class="param-label">检测目标</span>
+                <span class="param-value">{{ getYoloClassLabel(strategy.yoloClass) }}</span>
+              </div>
+              <div class="param-item">
+                <span class="param-label">置信度</span>
+                <div class="sensitivity-bar">
+                  <div class="sensitivity-fill medium" :style="{ width: (strategy.confidence || 0.5) * 100 + '%' }"></div>
+                </div>
+                <span class="param-value">{{ Math.round((strategy.confidence || 0.5) * 100) }}%</span>
+              </div>
+              <div class="param-item">
+                <span class="param-label">关联摄像头</span>
+                <span class="param-value">{{ strategy.cameraIds.length }} 个</span>
+              </div>
+            </template>
+            <!-- 其他策略配置 -->
+            <template v-else>
+              <div class="param-item">
+                <span class="param-label">敏感度</span>
+                <div class="sensitivity-bar">
+                  <div class="sensitivity-fill" :class="strategy.sensitivity" :style="{ width: sensitivityWidth(strategy.sensitivity) }"></div>
+                </div>
+                <span class="param-value">{{ sensitivityLabel(strategy.sensitivity) }}</span>
+              </div>
+              <div class="param-item">
+                <span class="param-label">预警级别</span>
+                <span class="badge" :class="levelBadge(strategy.level)">{{ levelLabel(strategy.level) }}</span>
+              </div>
+              <div class="param-item">
+                <span class="param-label">关联摄像头</span>
+                <span class="param-value">{{ strategy.cameraIds.length }} 个</span>
+              </div>
+            </template>
           </div>
         </div>
         
@@ -135,7 +204,48 @@
           </select>
         </div>
       </div>
-      <div class="form-row">
+
+      <!-- AI目标检测策略特殊配置 -->
+      <div v-if="formData.type === 'yolo'" class="form-section">
+        <div class="form-label">AI模型配置</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">检测模型</label>
+            <select v-model="formData.yoloModel" class="select">
+              <option v-for="model in strategyStore.yoloModels" :key="model.value" :value="model.value">
+                {{ model.label }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">检测目标</label>
+            <select v-model="formData.yoloClass" class="select">
+              <option v-for="cls in strategyStore.yoloClasses" :key="cls.value" :value="cls.value">
+                {{ cls.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">置信度阈值</label>
+            <div class="confidence-slider">
+              <input 
+                v-model.number="formData.confidence" 
+                type="range" 
+                min="0.1" 
+                max="0.95" 
+                step="0.05" 
+                class="slider"
+              />
+              <span class="confidence-value">{{ Math.round(formData.confidence * 100) }}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 其他策略配置 -->
+      <div v-if="formData.type !== 'yolo'" class="form-row">
         <div class="form-group">
           <label class="form-label">敏感度</label>
           <select v-model="formData.sensitivity" class="select">
@@ -183,6 +293,16 @@ const showModal = ref(false)
 const isEditing = ref(false)
 const editingId = ref(null)
 
+// 全局AI检测设置
+const globalSettings = reactive({
+  defaultModel: strategyStore.globalAISettings.defaultModel,
+  confidence: strategyStore.globalAISettings.confidence
+})
+
+const updateGlobalSettings = () => {
+  strategyStore.updateGlobalAISettings({ ...globalSettings })
+}
+
 const defaultFormData = {
   name: '',
   type: 'motion',
@@ -191,7 +311,10 @@ const defaultFormData = {
   sensitivity: 'medium',
   level: 'warning',
   schedule: '全天',
-  region: null
+  region: null,
+  yoloModel: 'yolov8',
+  yoloClass: 'all',
+  confidence: 0.5
 }
 
 const formData = reactive({ ...defaultFormData })
@@ -210,10 +333,13 @@ const openEditModal = (strategy) => {
     type: strategy.type,
     cameraIds: [...strategy.cameraIds],
     enabled: strategy.enabled,
-    sensitivity: strategy.sensitivity,
-    level: strategy.level,
-    schedule: strategy.schedule,
-    region: strategy.region
+    sensitivity: strategy.sensitivity || 'medium',
+    level: strategy.level || 'warning',
+    schedule: strategy.schedule || '全天',
+    region: strategy.region,
+    yoloModel: strategy.yoloModel || 'yolov8',
+    yoloClass: strategy.yoloClass || 'all',
+    confidence: strategy.confidence || 0.5
   })
   showModal.value = true
 }
@@ -246,7 +372,8 @@ const typeBadge = (type) => {
     motion: 'badge-info',
     intrusion: 'badge-danger',
     offline: 'badge-warning',
-    cover: 'badge-secondary'
+    cover: 'badge-secondary',
+    yolo: 'badge-danger'
   }
   return map[type] || 'badge-info'
 }
@@ -278,6 +405,16 @@ const sensitivityLabel = (sensitivity) => {
   const map = { low: '低', medium: '中', high: '高' }
   return map[sensitivity] || sensitivity
 }
+
+const getYoloModelLabel = (model) => {
+  const found = strategyStore.yoloModels.find(m => m.value === model)
+  return found ? found.label : 'YOLOv8'
+}
+
+const getYoloClassLabel = (cls) => {
+  const found = strategyStore.yoloClasses.find(c => c.value === cls)
+  return found ? found.label : '所有目标'
+}
 </script>
 
 <style scoped>
@@ -305,6 +442,90 @@ const sensitivityLabel = (sensitivity) => {
 .stat-label {
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+.global-ai-settings {
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(168, 85, 247, 0.02));
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 12px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.settings-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #a855f7;
+  margin: 0;
+}
+
+.settings-tip {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.setting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setting-item label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.setting-item .select {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.confidence-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.slider {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  outline: none;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #a855f7;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.confidence-value {
+  min-width: 45px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #a855f7;
 }
 
 .strategy-list {
@@ -367,6 +588,11 @@ const sensitivityLabel = (sensitivity) => {
 .strategy-icon.type-cover {
   background: rgba(6, 182, 212, 0.15);
   color: var(--accent-secondary);
+}
+
+.strategy-icon.type-yolo {
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
 }
 
 .strategy-info {
@@ -489,6 +715,47 @@ const sensitivityLabel = (sensitivity) => {
 
 .camera-option span {
   font-size: 13px;
+}
+
+.form-section {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(168, 85, 247, 0.05);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 8px;
+}
+
+.form-section > .form-label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #a855f7;
+}
+
+.confidence-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.slider {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  outline: none;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #a855f7;
+  border-radius: 50%;
+  cursor: pointer;
 }
 
 @media (max-width: 640px) {

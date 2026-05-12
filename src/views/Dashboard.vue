@@ -56,11 +56,15 @@
             <div class="preview-thumbnail" :class="`status-${source.status}`">
               <!-- 实时视频预览 -->
               <WebRTCPlayer 
-                v-if="source.status !== 'offline' && source.url"
-                :url="source.url"
-                :zlm-host="source.zlmHost || getHostFromUrl(source.url)"
+                v-if="source.status !== 'offline' && source.webrtc_url"
+                :url="source.webrtc_url"
+                :zlm-host="getHostFromUrl(source.webrtc_url)"
                 :zlm-port="source.zlmPort || 80"
                 :zlm-secret="source.zlmSecret || ''"
+                :ai-model="getVideoAIConfig(source.id).yoloModel"
+                :ai-class="getVideoAIConfig(source.id).yoloClass"
+                :ai-confidence="getVideoAIConfig(source.id).confidence"
+                @connection-failed="handleConnectionFailed(source.id)"
               />
               <!-- 离线占位 -->
               <div v-else class="preview-offline">
@@ -192,6 +196,17 @@ import WebRTCPlayer from '../components/video/WebRTCPlayer.vue'
 const videoStore = useVideoStore()
 const alarmStore = useAlarmStore()
 const strategyStore = useStrategyStore()
+
+// 获取视频源的AI配置
+const getVideoAIConfig = (sourceId) => {
+  return videoStore.getVideoAIConfig(sourceId)
+}
+
+// 处理视频连接失败
+const handleConnectionFailed = (sourceId) => {
+  console.log('[Dashboard] 视频连接失败:', sourceId)
+  videoStore.updateSourceStatus(sourceId, 'offline')
+}
 
 const gradients = [
   'linear-gradient(135deg, #1a1c2e 0%, #2d1f3d 50%, #1c2e4a 100%)',

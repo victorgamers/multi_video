@@ -5,6 +5,37 @@ import { ref, computed } from 'vue'
 const API_BASE = ''
 
 export const useVideoStore = defineStore('video', () => {
+  // 每路视频的AI配置
+  const getDefaultAIConfig = () => ({
+    yoloModel: 'yolov8',
+    yoloClass: 'all',
+    confidence: 0.5
+  })
+
+  // 从localStorage恢复AI配置
+  const loadAIConfigs = () => {
+    const saved = localStorage.getItem('videoAIConfigs')
+    return saved ? JSON.parse(saved) : {}
+  }
+
+  // 保存AI配置到localStorage
+  const saveAIConfigs = (configs) => {
+    localStorage.setItem('videoAIConfigs', JSON.stringify(configs))
+  }
+
+  // 获取指定视频的AI配置
+  const getVideoAIConfig = (videoId) => {
+    const configs = loadAIConfigs()
+    return configs[videoId] || { ...getDefaultAIConfig() }
+  }
+
+  // 更新指定视频的AI配置
+  const updateVideoAIConfig = (videoId, config) => {
+    const configs = loadAIConfigs()
+    configs[videoId] = { ...getDefaultAIConfig(), ...config }
+    saveAIConfigs(configs)
+  }
+
   const sources = ref([])
   const activeLayout = ref('4')
   const loading = ref(false)
@@ -108,6 +139,14 @@ export const useVideoStore = defineStore('video', () => {
     }
   }
 
+  // 更新单个视频源状态
+  const updateSourceStatus = (id, status) => {
+    const source = sources.value.find(s => s.id === id)
+    if (source) {
+      source.status = status
+    }
+  }
+
   const onlineCount = computed(() => sources.value.filter(s => s.status === 'online').length)
   const offlineCount = computed(() => sources.value.filter(s => s.status === 'offline').length)
   const totalCount = computed(() => sources.value.length)
@@ -122,8 +161,12 @@ export const useVideoStore = defineStore('video', () => {
     addSource,
     removeSource,
     updateSource,
+    updateSourceStatus,
     onlineCount,
     offlineCount,
-    totalCount
+    totalCount,
+    getDefaultAIConfig,
+    getVideoAIConfig,
+    updateVideoAIConfig
   }
 })

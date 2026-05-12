@@ -46,6 +46,30 @@ export const useStrategyStore = defineStore('strategy', () => {
       level: 'warning',
       schedule: '全天',
       region: null
+    },
+    {
+      id: 5,
+      name: 'YOLOv8目标检测',
+      type: 'yolo',
+      cameraIds: [1, 2, 3, 4],
+      enabled: true,
+      yoloModel: 'yolov8',
+      yoloClass: 'all',
+      confidence: 0.5,
+      schedule: '全天',
+      region: null
+    },
+    {
+      id: 6,
+      name: '人体姿态检测',
+      type: 'yolo',
+      cameraIds: [1],
+      enabled: false,
+      yoloModel: 'yolov8_pose',
+      yoloClass: 'person',
+      confidence: 0.6,
+      schedule: '夜间',
+      region: null
     }
   ])
 
@@ -88,13 +112,14 @@ export const useStrategyStore = defineStore('strategy', () => {
   const enabledCount = computed(() => strategies.value.filter(s => s.enabled).length)
   const totalCount = computed(() => strategies.value.length)
 
-  const strategyTypes = ['motion', 'intrusion', 'offline', 'cover']
+  const strategyTypes = ['motion', 'intrusion', 'offline', 'cover', 'yolo']
 
   const typeLabels = {
     motion: '移动侦测',
     intrusion: '区域入侵',
     offline: '视频丢失',
-    cover: '画面遮挡'
+    cover: '画面遮挡',
+    yolo: 'AI目标检测'
   }
 
   const sensitivityOptions = [
@@ -116,6 +141,41 @@ export const useStrategyStore = defineStore('strategy', () => {
     { value: '自定义', label: '自定义' }
   ]
 
+  // YOLO模型列表
+  const yoloModels = [
+    { value: 'yolov5', label: 'YOLOv5 (目标检测)' },
+    { value: 'yolov8', label: 'YOLOv8 (目标检测)' },
+    { value: 'yolov8_pose', label: 'YOLOv8-Pose (人体姿态)' },
+    { value: 'yolov8_seg', label: 'YOLOv8-Seg (实例分割)' },
+    { value: 'yolov9', label: 'YOLOv9 (目标检测)' },
+    { value: 'yolov10', label: 'YOLOv10 (目标检测)' },
+    { value: 'yolov26', label: 'YOLOv2.6 (目标检测)' }
+  ]
+
+  // YOLO检测目标类别
+  const yoloClasses = [
+    { value: 'person', label: '人' },
+    { value: 'vehicle', label: '车辆' },
+    { value: 'animal', label: '动物' },
+    { value: 'all', label: '检测所有目标' }
+  ]
+
+  // 全局AI检测配置
+  const globalAISettings = ref(JSON.parse(localStorage.getItem('globalAISettings')) || {
+    defaultModel: 'yolov8',
+    confidence: 0.5,
+    autoRecord: false
+  })
+
+  const saveGlobalAISettings = () => {
+    localStorage.setItem('globalAISettings', JSON.stringify(globalAISettings.value))
+  }
+
+  const updateGlobalAISettings = (updates) => {
+    Object.assign(globalAISettings.value, updates)
+    saveGlobalAISettings()
+  }
+
   return {
     strategies,
     addStrategy,
@@ -128,6 +188,10 @@ export const useStrategyStore = defineStore('strategy', () => {
     typeLabels,
     sensitivityOptions,
     levelOptions,
-    scheduleOptions
+    scheduleOptions,
+    yoloModels,
+    yoloClasses,
+    globalAISettings,
+    updateGlobalAISettings
   }
 })

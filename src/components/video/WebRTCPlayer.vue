@@ -7,32 +7,17 @@
       playsinline
       muted
     ></video>
-    <div v-if="connectionState === 'connecting'" class="player-overlay">
-      <div class="loading-spinner"></div>
-      <span>正在连接...</span>
-      <span class="debug-info">{{ debugInfo }}</span>
-    </div>
-    <div v-else-if="connectionState === 'failed'" class="player-overlay error">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="15" y1="9" x2="9" y2="15"/>
-        <line x1="9" y1="9" x2="15" y2="15"/>
-      </svg>
-      <span>连接失败</span>
-      <span class="debug-info error">{{ debugInfo }}</span>
-      <button class="retry-btn" @click="connect">重试</button>
-    </div>
-    <div v-else-if="connectionState === 'new'" class="player-overlay">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polygon points="5 3 19 12 5 21 5 3"/>
-      </svg>
-      <span>等待连接</span>
-      <span class="debug-info">{{ debugInfo }}</span>
-      <button class="retry-btn" @click="connect">连接</button>
-    </div>
-    <div v-else-if="connectionState === 'connected'" class="connected-indicator">
+
+    <div v-if="connectionState === 'connected'" class="connected-indicator">
       <span class="live-dot"></span>
       <span>LIVE</span>
+    </div>
+
+    <!-- 录像中指示器 -->
+    <div v-if="isRecording" class="recording-indicator">
+      <span class="rec-dot"></span>
+      <span>REC</span>
+      <span class="rec-time">{{ formatDuration(recordingDuration) }}</span>
     </div>
   </div>
 </template>
@@ -60,10 +45,27 @@ const props = defineProps({
   zlmSecret: {
     type: String,
     default: ''
+  },
+  cameraName: {
+    type: String,
+    default: 'camera'
+  },
+  // AI检测配置
+  aiModel: {
+    type: String,
+    default: 'yolov8'
+  },
+  aiClass: {
+    type: String,
+    default: 'all'
+  },
+  aiConfidence: {
+    type: Number,
+    default: 0.5
   }
 })
 
-const emit = defineEmits(['stateChange', 'error', 'debug'])
+const emit = defineEmits(['stateChange', 'error', 'debug', 'recordingComplete', 'connectionFailed'])
 
 const videoRef = ref(null)
 const connectionState = ref('new')
@@ -72,6 +74,14 @@ let peerConnection = null
 let retryTimeout = null
 let pcConfig = null
 let ws = null
+
+// 录像相关
+let mediaRecorder = null
+let recordedChunks = []
+let recordingStream = null
+let recordingTimer = null
+const isRecording = ref(false)
+const recordingDuration = ref(0)
 
 const log = (msg, type = 'info') => {
   console.log(`[ZLM WebRTC] ${msg}`)
@@ -145,6 +155,8 @@ const createPeerConnection = () => {
         videoRef.value.srcObject = event.streams[0]
         log('视频源已设置')
       }
+      // 保存流用于录像
+      recordingStream = event.streams[0]
     }
   }
   
@@ -176,6 +188,7 @@ const createPeerConnection = () => {
       connectionState.value = 'failed'
       emit('stateChange', 'failed')
       emit('error', 'ICE 连接失败')
+      emit('connectionFailed')
     } else if (state === 'disconnected') {
       log('连接断开，尝试重连...')
       // 不立即标记为失败，等待自动重连
@@ -398,27 +411,26 @@ const tryHttpMode = async (pc, parsed) => {
   log('[HTTP模式] 所有尝试都失败', 'error')
   connectionState.value = 'failed'
   emit('error', 'ZLM 连接失败')
+  emit('connectionFailed')
   return false
 }
 
 
 
-// 启动重连定时器
+// 启动重连定时器（不再自动重连，由用户手动触发）
 let reconnectTimer = null
 const startReconnectTimer = () => {
-  if (reconnectTimer) clearTimeout(reconnectTimer)
-  
-  reconnectTimer = setTimeout(() => {
-    if (connectionState.value === 'connecting' || connectionState.value === 'new') {
-      log('连接超时，尝试重连...')
-      connect()
-    }
-  }, 10000)
+  // 移除了自动重连逻辑
 }
 
 // 断开连接
 const disconnect = () => {
   log('断开连接...')
+  
+  // 停止录像
+  if (isRecording.value) {
+    stopRecording()
+  }
   
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
@@ -441,6 +453,8 @@ const disconnect = () => {
     peerConnection = null
   }
   
+  recordingStream = null
+  
   if (videoRef.value) {
     videoRef.value.srcObject = null
   }
@@ -459,6 +473,117 @@ const takeSnapshot = () => {
   return canvas.toDataURL('image/jpeg', 0.8)
 }
 
+// 录像相关方法
+const formatDuration = (seconds) => {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
+
+// 开始录像
+const startRecording = () => {
+  if (!recordingStream) {
+    log('无可用视频流', 'error')
+    return false
+  }
+  
+  if (isRecording.value) {
+    log('正在录像中...', 'error')
+    return false
+  }
+  
+  try {
+    recordedChunks = []
+    recordingDuration.value = 0
+    
+    // 创建 MediaRecorder，支持多种格式
+    const options = { mimeType: 'video/webm;codecs=vp9,opus' }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options.mimeType = 'video/webm;codecs=vp8,opus'
+    }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options.mimeType = 'video/webm'
+    }
+    
+    log(`录像格式: ${options.mimeType}`)
+    mediaRecorder = new MediaRecorder(recordingStream, options)
+    
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data)
+      }
+    }
+    
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' })
+      const url = URL.createObjectURL(blob)
+      
+      // 自动下载录像文件
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const filename = `${props.cameraName}_${timestamp}.webm`
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      
+      URL.revokeObjectURL(url)
+      log(`录像已保存: ${filename}`)
+      emit('recordingComplete', { 
+        filename, 
+        size: blob.size, 
+        duration: recordingDuration.value
+      })
+    }
+    
+    mediaRecorder.onerror = (error) => {
+      log(`录像错误: ${error}`, 'error')
+      isRecording.value = false
+    }
+    
+    mediaRecorder.start(1000) // 每秒保存一次数据
+    isRecording.value = true
+    
+    // 计时器
+    recordingTimer = setInterval(() => {
+      recordingDuration.value++
+    }, 1000)
+    
+    log('开始录像')
+    return true
+  } catch (error) {
+    log(`创建录像失败: ${error.message}`, 'error')
+    return false
+  }
+}
+
+// 停止录像
+const stopRecording = () => {
+  if (!isRecording.value || !mediaRecorder) {
+    return false
+  }
+  
+  try {
+    mediaRecorder.stop()
+    isRecording.value = false
+    
+    if (recordingTimer) {
+      clearInterval(recordingTimer)
+      recordingTimer = null
+    }
+    
+    log('停止录像')
+    return true
+  } catch (error) {
+    log(`停止录像失败: ${error.message}`, 'error')
+    return false
+  }
+}
+
+// 检查是否正在录像
+const checkRecording = () => {
+  return isRecording.value
+}
+
 // 监听 URL 变化
 watch(() => props.url, (newUrl) => {
   log(`URL 变化: ${newUrl}`)
@@ -472,8 +597,9 @@ watch(() => props.url, (newUrl) => {
 
 onMounted(() => {
   log('组件挂载')
-  if (props.url && props.autoplay) {
-    setTimeout(() => connect(), 100)
+  // 自动开始连接
+  if (props.url) {
+    connect()
   }
 })
 
@@ -486,7 +612,11 @@ defineExpose({
   connect,
   disconnect,
   takeSnapshot,
+  startRecording,
+  stopRecording,
+  checkRecording,
   connectionState,
+  isRecording,
   debugInfo
 })
 </script>
@@ -601,5 +731,40 @@ defineExpose({
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* 录像指示器 */
+.recording-indicator {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(239, 68, 68, 0.9);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: bold;
+  color: white;
+  z-index: 10;
+}
+
+.rec-dot {
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  animation: rec-blink 1s ease-in-out infinite;
+}
+
+.rec-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+
+@keyframes rec-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 </style>

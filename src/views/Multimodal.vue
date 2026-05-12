@@ -1080,9 +1080,12 @@ onMounted(async () => {
 .screenshot-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  row-gap: 4px;
+  column-gap: 8px;
   flex: 1;
+  max-height: 500px;
   overflow-y: auto;
+  align-content: start;
 }
 
 .screenshot-item {

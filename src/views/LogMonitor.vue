@@ -36,6 +36,15 @@
         </button>
       </div>
       <div class="toolbar-right">
+        <!-- Sheet 选择器 -->
+        <div v-if="sheetNames.length > 1" class="sheet-selector">
+          <label>选择 Sheet:</label>
+          <select v-model="selectedSheet" class="filter-select" @change="changeSheet">
+            <option v-for="sheet in sheetNames" :key="sheet" :value="sheet">
+              {{ sheet }}
+            </option>
+          </select>
+        </div>
         <span v-if="logData.length" class="data-info">
           共 {{ logData.length }} 条记录
         </span>
@@ -82,6 +91,9 @@ import { ref, computed } from 'vue'
 const fileInput = ref(null)
 const logData = ref([])
 const XLSX = ref(null)
+const workbook = ref(null)
+const sheetNames = ref([])
+const selectedSheet = ref('')
 
 // 获取表格列名
 const columns = computed(() => {
@@ -142,9 +154,12 @@ const parseExcelFile = (file) => {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result)
-        const workbook = XLSX.value.read(data, { type: 'array', cellDates: true })
-        const firstSheetName = workbook.SheetNames[0]
-        const worksheet = workbook.Sheets[firstSheetName]
+        const wb = XLSX.value.read(data, { type: 'array', cellDates: true })
+        workbook.value = wb
+        sheetNames.value = wb.SheetNames
+        selectedSheet.value = wb.SheetNames[0]
+        
+        const worksheet = wb.Sheets[wb.SheetNames[0]]
         const jsonData = XLSX.value.utils.sheet_to_json(worksheet, { defval: '' })
         resolve(jsonData)
       } catch (err) {
@@ -156,9 +171,19 @@ const parseExcelFile = (file) => {
   })
 }
 
+// 切换 Sheet
+const changeSheet = () => {
+  if (!workbook.value || !selectedSheet.value) return
+  const worksheet = workbook.value.Sheets[selectedSheet.value]
+  logData.value = XLSX.value.utils.sheet_to_json(worksheet, { defval: '' })
+}
+
 const clearData = () => {
   if (confirm('确定要清空数据吗？')) {
     logData.value = []
+    workbook.value = null
+    sheetNames.value = []
+    selectedSheet.value = ''
   }
 }
 
@@ -195,6 +220,22 @@ const getCellValue = (row, col) => {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.sheet-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet-selector label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.sheet-selector select {
+  min-width: 120px;
 }
 
 .data-info {

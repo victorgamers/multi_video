@@ -9,9 +9,14 @@
         :zlm-host="source.zlmHost || '192.168.0.101'"
         :zlm-port="source.zlmPort || 80"
         :zlm-secret="source.zlmSecret || ''"
+        :camera-name="source.name"
+        :ai-model="aiConfig.yoloModel"
+        :ai-class="aiConfig.yoloClass"
+        :ai-confidence="aiConfig.confidence"
         @stateChange="handleStateChange"
         @error="handleError"
         @debug="handleDebug"
+        @recordingComplete="handleRecordingComplete"
       />
       
       <!-- 离线状态 -->
@@ -37,7 +42,51 @@
             <span class="status-text">{{ statusText }}</span>
           </div>
         </div>
+        <!-- AI模型标签 -->
+        <div class="ai-model-tag" :title="`模型: ${aiConfig.yoloModel}, 置信度: ${Math.round(aiConfig.confidence * 100)}%`">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <span>{{ aiModelLabel }}</span>
+        </div>
         <div class="video-actions">
+          <!-- 启动/停止按钮 -->
+          <button 
+            v-if="connectionState === 'connected'"
+            class="action-btn stop-btn" 
+            title="停止"
+            @click="stopStream"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+          </button>
+          <button 
+            v-else
+            class="action-btn play-btn" 
+            title="启动"
+            @click="startStream"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+          </button>
+          <!-- 录像按钮 -->
+          <button 
+            v-if="connectionState === 'connected'"
+            :class="['action-btn', isRecording ? 'recording-btn' : '']"
+            :title="isRecording ? '停止录像' : '开始录像'"
+            @click="toggleRecording"
+          >
+            <svg v-if="!isRecording" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <circle cx="12" cy="12" r="8"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+          </button>
           <button class="action-btn" title="全屏" @click="$emit('fullscreen', source)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="15 3 21 3 21 9"/>
@@ -72,9 +121,11 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useVideoStore } from '../../stores/video'
+import { useStrategyStore } from '../../stores/strategy'
 import WebRTCPlayer from './WebRTCPlayer.vue'
 
 const videoStore = useVideoStore()
+const strategyStore = useStrategyStore()
 
 const props = defineProps({
   source: {
@@ -87,6 +138,19 @@ const emit = defineEmits(['fullscreen', 'detail', 'screenshot'])
 
 const playerRef = ref(null)
 const connectionState = ref('new')
+const isPlaying = ref(false)
+const isRecording = ref(false)
+
+// 获取该路视频的AI配置
+const aiConfig = computed(() => {
+  return videoStore.getVideoAIConfig(props.source.id)
+})
+
+// 获取AI模型标签
+const aiModelLabel = computed(() => {
+  const found = strategyStore.yoloModels.find(m => m.value === aiConfig.value.yoloModel)
+  return found ? found.label.split(' ')[0] : 'YOLOv8'
+})
 
 const statusText = computed(() => {
   const statusMap = {
@@ -101,13 +165,56 @@ const statusText = computed(() => {
   return statusMap[connectionState.value] || '未知'
 })
 
+const startStream = () => {
+  if (playerRef.value) {
+    playerRef.value.connect()
+    isPlaying.value = true
+  }
+}
+
+const stopStream = () => {
+  if (playerRef.value) {
+    // 停止录像
+    if (isRecording.value) {
+      toggleRecording()
+    }
+    playerRef.value.disconnect()
+    isPlaying.value = false
+    connectionState.value = 'new'
+  }
+}
+
+const toggleRecording = () => {
+  if (!playerRef.value) return
+  
+  if (isRecording.value) {
+    playerRef.value.stopRecording()
+    isRecording.value = false
+  } else {
+    const success = playerRef.value.startRecording()
+    if (success) {
+      isRecording.value = true
+    }
+  }
+}
+
+const handleRecordingComplete = (info) => {
+  console.log(`录像完成: ${info.filename}, 大小: ${info.size} bytes, 时长: ${info.duration}秒`)
+}
+
 const handleStateChange = (state) => {
   connectionState.value = state
   // 同步更新 videoStore 中的状态
   if (state === 'connected') {
     videoStore.updateSource(props.source.id, { status: 'online' })
+    isPlaying.value = true
   } else if (state === 'failed' || state === 'closed') {
     videoStore.updateSource(props.source.id, { status: 'offline' })
+    isPlaying.value = false
+    // 断开时停止录像
+    if (isRecording.value) {
+      isRecording.value = false
+    }
   }
 }
 
@@ -335,6 +442,32 @@ watch(() => props.source.status, (newStatus) => {
   transform: scale(1.1);
 }
 
+.action-btn.play-btn:hover {
+  background: var(--success);
+}
+
+.action-btn.stop-btn {
+  background: rgba(239, 68, 68, 0.7);
+}
+
+.action-btn.stop-btn:hover {
+  background: var(--danger);
+}
+
+.action-btn.recording-btn {
+  background: rgba(239, 68, 68, 0.9);
+  animation: rec-pulse 1.5s ease-in-out infinite;
+}
+
+.action-btn.recording-btn:hover {
+  background: var(--danger);
+}
+
+@keyframes rec-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
 .action-btn svg {
   width: 100%;
   height: 100%;
@@ -348,5 +481,25 @@ watch(() => props.source.status, (newStatus) => {
   font-size: 11px;
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-secondary);
+}
+
+.ai-model-tag {
+  position: absolute;
+  top: 40px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(168, 85, 247, 0.8);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: white;
+  cursor: default;
+}
+
+.ai-model-tag svg {
+  opacity: 0.9;
 }
 </style>

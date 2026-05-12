@@ -9,9 +9,8 @@
         <div class="model-selector">
           <select v-model="selectedModel" class="model-select" :disabled="chatStore.runningModel">
             <option value="">选择本地模型</option>
-            <option value="DeepSeek-R1">DeepSeek-R1</option>
             <option value="DeepSeek-R1-Distill-Qwen-7B">DeepSeek-R1-Distill-Qwen-7B</option>
-            <option value="Tiny-1.1B">Tiny-1.1B</option>
+            <option value="TinyLlama-1.1B">TinyLlama-1.1B</option>
           </select>
           <button 
             class="btn btn-success" 
