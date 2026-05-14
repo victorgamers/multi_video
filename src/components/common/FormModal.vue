@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="show" class="modal-overlay" @click.self="$emit('close')">
-      <div class="modal" :style="{ maxWidth: maxWidth }">
+      <div class="modal" :class="modalClass" :style="{ maxWidth: maxWidth }">
         <div class="modal-header">
           <h3>{{ title }}</h3>
           <button class="close-btn" @click="$emit('close')">
@@ -37,6 +37,10 @@ const props = defineProps({
   maxWidth: {
     type: String,
     default: '500px'
+  },
+  modalClass: {
+    type: String,
+    default: ''
   }
 })
 

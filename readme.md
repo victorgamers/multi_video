@@ -20,7 +20,7 @@
 ## 多种模型策略配置
 
 <p align="center">
-  <img src="./docs/6.png" width="90%">
+  <img src="./docs/7.png" width="90%">
 </p>
 
 ## 截图预警
@@ -101,7 +101,7 @@
                          |
                          v
                 +----------------+
-                | YUV/RGA OSD    |
+                | YUV/RGA 渲染 |
                 +----------------+
                          |
                          v

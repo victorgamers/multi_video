@@ -36,6 +36,18 @@ export const useVideoStore = defineStore('video', () => {
     saveAIConfigs(configs)
   }
 
+  // 加载所有视频AI配置
+  const loadVideoAIConfigs = () => {
+    return loadAIConfigs()
+  }
+
+  // 删除指定视频的AI配置
+  const removeVideoAIConfig = (videoId) => {
+    const configs = loadAIConfigs()
+    delete configs[videoId]
+    saveAIConfigs(configs)
+  }
+
   const sources = ref([])
   const activeLayout = ref('4')
   const loading = ref(false)
@@ -167,6 +179,8 @@ export const useVideoStore = defineStore('video', () => {
     totalCount,
     getDefaultAIConfig,
     getVideoAIConfig,
-    updateVideoAIConfig
+    updateVideoAIConfig,
+    loadVideoAIConfigs,
+    removeVideoAIConfig
   }
 })
