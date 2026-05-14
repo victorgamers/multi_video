@@ -22,7 +22,7 @@
             <circle cx="12" cy="13" r="4"/>
           </svg>
           AI检测配置
-          <span class="settings-count">{{ Object.keys(videoAIConfigs).length }}</span>
+          <span class="settings-count">{{ strategyStore.strategies.length }}</span>
         </h3>
         <button class="btn btn-secondary btn-sm" @click="openAddVideoAIConfig">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -33,8 +33,8 @@
         </button>
       </div>
 
-      <!-- 全局配置区域 -->
-      <div v-if="videoAIConfigs['global']" class="config-section">
+      <!-- 全局配置区域 - 显示所有全局策略 -->
+      <div v-if="globalStrategies.length > 0" class="config-section">
         <div class="config-section-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <circle cx="12" cy="12" r="10"/>
@@ -42,87 +42,20 @@
             <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
           </svg>
           全局配置
-          <span class="section-tag">全局</span>
-        </div>
-        <div class="config-card global">
-          <div class="video-ai-header">
-            <span class="video-name">全局配置</span>
-            <div class="video-ai-actions-inline">
-              <button class="btn-icon" title="编辑" @click="openEditVideoAIConfig('global')">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-              </button>
-              <button class="btn-icon danger" title="删除" @click="removeVideoAIConfig('global')">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                  <polyline points="3 6 5 6 21 6"/>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          <div class="video-ai-form">
-            <div class="form-group">
-              <label>检测模型</label>
-              <select v-model="videoAIConfigs['global'].yoloModel" class="select" @change="saveVideoAIConfig('global')">
-                <option v-for="model in strategyStore.yoloModels" :key="model.value" :value="model.value">
-                  {{ model.label }}
-                </option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>检测目标</label>
-              <div class="class-badges">
-                <span v-if="Array.isArray(videoAIConfigs['global'].yoloClass) && videoAIConfigs['global'].yoloClass.length === 80" class="class-badge all">所有类别</span>
-                <span v-else-if="Array.isArray(videoAIConfigs['global'].yoloClass) && videoAIConfigs['global'].yoloClass.length > 0" class="class-badge">
-                  {{ videoAIConfigs['global'].yoloClass.length }} 个类别
-                </span>
-                <span v-else class="class-badge empty">未选择</span>
-              </div>
-            </div>
-            <div class="form-group">
-              <label>置信度阈值</label>
-              <div class="confidence-slider small">
-                <input 
-                  v-model.number="videoAIConfigs['global'].confidence" 
-                  type="range" 
-                  min="0.1" 
-                  max="0.95" 
-                  step="0.05" 
-                  class="slider"
-                  @change="saveVideoAIConfig('global')"
-                />
-                <span class="confidence-value">{{ Math.round(videoAIConfigs['global'].confidence * 100) }}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 各个视频流配置区域 -->
-      <div v-if="hasStreamConfigs" class="config-section">
-        <div class="config-section-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-            <line x1="8" y1="21" x2="16" y2="21"/>
-            <line x1="12" y1="17" x2="12" y2="21"/>
-          </svg>
-          视频流配置
-          <span class="section-tag stream">{{ streamConfigs.length }} 个</span>
+          <span class="section-tag">{{ globalStrategies.length }} 个</span>
         </div>
         <div class="video-ai-grid">
-          <div v-for="(config, sourceId) in streamConfigs" :key="sourceId" class="video-ai-card">
+          <div v-for="strategy in globalStrategies" :key="strategy.id" class="config-card global">
             <div class="video-ai-header">
-              <span class="video-name">{{ getSourceName(sourceId) }}</span>
+              <span class="video-name">全局配置 #{{ strategy.id }}</span>
               <div class="video-ai-actions-inline">
-                <button class="btn-icon" title="编辑" @click="openEditVideoAIConfig(sourceId)">
+                <button class="btn-icon" title="编辑" @click="openEditVideoAIConfig('global', strategy)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                   </svg>
                 </button>
-                <button class="btn-icon danger" title="删除" @click="removeVideoAIConfig(sourceId)">
+                <button class="btn-icon danger" title="删除" @click="removeVideoAIConfig('global', strategy)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                     <polyline points="3 6 5 6 21 6"/>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -133,39 +66,69 @@
             <div class="video-ai-form">
               <div class="form-group">
                 <label>检测模型</label>
-                <select v-model="config.yoloModel" class="select" @change="saveVideoAIConfig(sourceId)">
-                  <option v-for="model in strategyStore.yoloModels" :key="model.value" :value="model.value">
-                    {{ model.label }}
-                  </option>
-                </select>
+                <span class="config-value">{{ getYoloModelLabelByType(strategy.type) }}</span>
               </div>
               <div class="form-group">
                 <label>检测目标</label>
                 <div class="class-badges">
-                  <span v-if="Array.isArray(config.yoloClass) && config.yoloClass.length === 80" class="class-badge all">所有类别</span>
-                  <span v-else-if="Array.isArray(config.yoloClass) && config.yoloClass.length > 0" class="class-badge">
-                    {{ config.yoloClass.length }} 个类别
-                  </span>
-                  <span v-else class="class-badge empty">未选择</span>
-                  <span v-if="Array.isArray(config.yoloClass) && config.yoloClass.length > 0 && config.yoloClass.length < 80" class="class-idx-list">
-                    [{{ config.yoloClass.join(', ') }}]
-                  </span>
+                  <span v-if="!strategy.selectIds || strategy.selectIds.length === 0 || strategy.selectIds.length === 80" class="class-badge all">所有类别</span>
+                  <span v-else class="class-badge">{{ strategy.selectIds.length }} 个类别</span>
                 </div>
               </div>
               <div class="form-group">
                 <label>置信度阈值</label>
-                <div class="confidence-slider small">
-                  <input 
-                    v-model.number="config.confidence" 
-                    type="range" 
-                    min="0.1" 
-                    max="0.95" 
-                    step="0.05" 
-                    class="slider"
-                    @change="saveVideoAIConfig(sourceId)"
-                  />
-                  <span class="confidence-value">{{ Math.round(config.confidence * 100) }}%</span>
+                <span class="config-value">{{ Math.round((strategy.objectThreshold || 0.5) * 100) }}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 各个视频流配置区域 -->
+      <div v-if="streamStrategies.length > 0" class="config-section">
+        <div class="config-section-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+          视频流配置
+          <span class="section-tag stream">{{ streamStrategies.length }} 个</span>
+        </div>
+        <div class="video-ai-grid">
+          <div v-for="strategy in streamStrategies" :key="strategy.id" class="video-ai-card">
+            <div class="video-ai-header">
+              <span class="video-name">{{ getSourceName(strategy.streamId) }}</span>
+              <div class="video-ai-actions-inline">
+                <button class="btn-icon" title="编辑" @click="openEditVideoAIConfig(strategy.streamId, strategy)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <button class="btn-icon danger" title="删除" @click="removeVideoAIConfig(strategy.streamId, strategy)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="video-ai-form">
+              <div class="form-group">
+                <label>检测模型</label>
+                <span class="config-value">{{ getYoloModelLabelByType(strategy.type) }}</span>
+              </div>
+              <div class="form-group">
+                <label>检测目标</label>
+                <div class="class-badges">
+                  <span v-if="!strategy.selectIds || strategy.selectIds.length === 0 || strategy.selectIds.length === 80" class="class-badge all">所有类别</span>
+                  <span v-else class="class-badge">{{ strategy.selectIds.length }} 个类别</span>
                 </div>
+              </div>
+              <div class="form-group">
+                <label>置信度阈值</label>
+                <span class="config-value">{{ Math.round((strategy.objectThreshold || 0.5) * 100) }}%</span>
               </div>
             </div>
           </div>
@@ -173,7 +136,7 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-if="!hasVideoAIConfigs" class="empty-config-box">
+      <div v-if="!strategyStore.strategies || strategyStore.strategies.length === 0" class="empty-config-box">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
           <circle cx="8.5" cy="8.5" r="1.5"/>
@@ -195,7 +158,7 @@
     <FormModal :show="showVideoAIConfigModal" :title="isEditingVideoAIConfig ? '编辑AI配置' : '添加AI配置'" @close="closeVideoAIConfigModal" modal-class="ai-config-modal">
       <div class="form-group">
         <label class="form-label">选择视频流 *</label>
-        <select v-model="videoAIConfigForm.sourceId" class="select">
+        <select v-model="videoAIConfigForm.sourceId" class="select" :disabled="isEditingVideoAIConfig">
           <option value="">-- 选择视频流 --</option>
           <option value="global">全局 (所有视频流)</option>
           <option v-for="source in onlineSources" :key="source.id" :value="source.id">
@@ -275,7 +238,7 @@
           @click="saveVideoAIConfigFromModal"
           :disabled="!videoAIConfigForm.sourceId || !videoAIConfigForm.yoloModel"
         >
-          {{ isEditingVideoAIConfig ? '保存' : '添加' }}
+          {{ isEditingVideoAIConfig ? '修改' : '添加' }}
         </button>
       </template>
     </FormModal>
@@ -297,6 +260,7 @@ const isEditingVideoAIConfig = ref(false)
 const editingVideoAIConfigId = ref(null)
 
 const videoAIConfigForm = reactive({
+  strategyId: null,
   sourceId: '',
   yoloModel: 'yolov8',
   yoloClass: [],
@@ -304,6 +268,7 @@ const videoAIConfigForm = reactive({
 })
 
 const defaultVideoAIConfigForm = {
+  strategyId: null,
   sourceId: '',
   yoloModel: 'yolov8',
   yoloClass: [],
@@ -342,20 +307,18 @@ const hasVideoAIConfigs = computed(() => {
   return Object.keys(videoAIConfigs.value).length > 0
 })
 
-// 视频流配置（非全局）
-const streamConfigs = computed(() => {
-  const configs = {}
-  for (const [key, value] of Object.entries(videoAIConfigs.value)) {
-    if (key !== 'global') {
-      configs[key] = value
-    }
-  }
-  return configs
+// 全局策略（streamId = -1 或 0）
+const globalStrategies = computed(() => {
+  if (!strategyStore.strategies || strategyStore.strategies.length === 0) return []
+  return strategyStore.strategies.filter(s => s.streamId === -1 || s.streamId === 0)
 })
 
-// 是否有视频流配置
-const hasStreamConfigs = computed(() => {
-  return Object.keys(streamConfigs.value).length > 0
+// 视频流策略（streamId >= 1），按 streamId 排序
+const streamStrategies = computed(() => {
+  if (!strategyStore.strategies || strategyStore.strategies.length === 0) return []
+  return strategyStore.strategies
+    .filter(s => s.streamId >= 1)
+    .sort((a, b) => a.streamId - b.streamId)
 })
 
 // 可用的视频源（未配置的）- 现在直接使用 onlineSources 在模板中，"global" 选项在模板中硬编码
@@ -391,14 +354,22 @@ const getSourceName = (sourceId) => {
 }
 
 // 启动策略
-const startStrategy = () => {
+const startStrategy = async () => {
   if (!hasVideoAIConfigs.value) {
     alert('请先配置至少一个视频流的AI检测参数')
     return
   }
-  // TODO: 调用后端API启动策略
-  console.log('启动AI检测策略:', videoAIConfigs.value)
-  alert('策略已启动！')
+  try {
+    const result = await strategyStore.startStrategyAPI()
+    if (result.success) {
+      alert('策略已启动！')
+    } else {
+      alert(result.message || '启动策略失败')
+    }
+  } catch (e) {
+    console.error('启动策略失败:', e)
+    alert('启动策略失败: ' + e.message)
+  }
 }
 
 // 打开添加视频AI配置弹窗
@@ -410,17 +381,31 @@ const openAddVideoAIConfig = () => {
 }
 
 // 打开编辑视频AI配置弹窗
-const openEditVideoAIConfig = (sourceId) => {
+const openEditVideoAIConfig = (sourceId, strategy) => {
   isEditingVideoAIConfig.value = true
   editingVideoAIConfigId.value = sourceId
-  const config = videoAIConfigs.value[sourceId]
-  if (config) {
+  console.log('[编辑] 打开编辑，sourceId:', sourceId, 'strategy:', strategy)
+  // 如果传入了strategy对象（从策略列表编辑），使用strategy的数据
+  if (strategy) {
     Object.assign(videoAIConfigForm, {
-      sourceId: sourceId,
-      yoloModel: config.yoloModel || 'yolov8',
-      yoloClass: Array.isArray(config.yoloClass) ? [...config.yoloClass] : (config.yoloClass === -1 ? strategyStore.yoloClasses.map(c => c.idx) : []),
-      confidence: config.confidence || 0.5
+      strategyId: strategy.id,
+      sourceId: sourceId === 'global' ? 'global' : String(strategy.streamId),
+      yoloModel: strategyStore.typeModelMap ? (strategyStore.typeModelMap[strategy.type] || 'yolov8') : 'yolov8',
+      yoloClass: strategy.selectIds && strategy.selectIds.length > 0 ? [...strategy.selectIds] : [],
+      confidence: strategy.objectThreshold || 0.5
     })
+    console.log('[编辑] 填充表单:', videoAIConfigForm)
+  } else {
+    const config = videoAIConfigs.value[sourceId]
+    if (config) {
+      Object.assign(videoAIConfigForm, {
+        strategyId: null,
+        sourceId: sourceId,
+        yoloModel: config.yoloModel || 'yolov8',
+        yoloClass: Array.isArray(config.yoloClass) ? [...config.yoloClass] : [],
+        confidence: config.confidence || 0.5
+      })
+    }
   }
   showVideoAIConfigModal.value = true
 }
@@ -433,44 +418,116 @@ const closeVideoAIConfigModal = () => {
 }
 
 // 保存视频AI配置（从弹窗）
-const saveVideoAIConfigFromModal = () => {
+const saveVideoAIConfigFromModal = async () => {
   if (!videoAIConfigForm.sourceId || !videoAIConfigForm.yoloModel) return
   
-  const sourceId = videoAIConfigForm.sourceId
   const config = {
+    sourceId: videoAIConfigForm.sourceId,
     yoloModel: videoAIConfigForm.yoloModel,
     yoloClass: videoAIConfigForm.yoloClass,
     confidence: videoAIConfigForm.confidence
   }
   
-  videoAIConfigs.value[sourceId] = config
-  videoStore.updateVideoAIConfig(sourceId, config)
+  let result = null
+  
+  console.log('[保存] 是否编辑模式:', isEditingVideoAIConfig.value, '策略ID:', videoAIConfigForm.strategyId)
+  
+  if (isEditingVideoAIConfig.value && videoAIConfigForm.strategyId) {
+    // 编辑模式：调用修改策略 API
+    console.log('[保存] 进入编辑模式，调用 changeStrategy')
+    // changeStrategy(id, updates) 接受策略ID和更新数据
+    const updates = {
+      id: videoAIConfigForm.strategyId,
+      streamId: videoAIConfigForm.sourceId === 'global' ? -1 : parseInt(videoAIConfigForm.sourceId),
+      type: strategyStore.modelTypeMap ? (strategyStore.modelTypeMap[videoAIConfigForm.yoloModel] || 2) : 2,
+      selectIds: videoAIConfigForm.yoloClass,
+      objectThreshold: videoAIConfigForm.confidence
+    }
+    console.log('[保存] updates:', updates)
+    result = await strategyStore.changeStrategy(videoAIConfigForm.strategyId, updates)
+    console.log('[保存] 修改结果:', result)
+  } else {
+    // 添加模式：调用添加策略 API
+    result = await strategyStore.addStrategyAPI(config)
+  }
+  
+  if (result && result.success) {
+    // 操作后重新获取配置列表
+    await strategyStore.fetchStrategies()
+    await strategyStore.fetchGlobalConfig()
+    await strategyStore.fetchStreamConfigs()
+    initVideoAIConfigs()
+  }
   
   closeVideoAIConfigModal()
 }
 
 // 删除视频AI配置
-const removeVideoAIConfig = (sourceId) => {
-  if (confirm('确定要删除该视频流的AI配置吗？')) {
-    delete videoAIConfigs.value[sourceId]
-    videoStore.removeVideoAIConfig(sourceId)
+const removeVideoAIConfig = async (sourceId, strategy) => {
+  if (!confirm('确定要删除该视频流的AI配置吗？')) return
+  
+  try {
+    // 调用后端删除 API
+    if (strategy && strategy.id) {
+      const result = await strategyStore.deleteStrategy(strategy.id)
+      if (result.success) {
+        console.log('[删除] 策略删除成功, ID:', strategy.id)
+        // 重新获取策略列表
+        await strategyStore.fetchStrategies()
+        await strategyStore.fetchGlobalConfig()
+        await strategyStore.fetchStreamConfigs()
+        initVideoAIConfigs()
+      } else {
+        alert(result.message || '删除失败')
+      }
+    } else {
+      // 如果没有 strategy id，只删除本地配置
+      delete videoAIConfigs.value[sourceId]
+      videoStore.removeVideoAIConfig(sourceId)
+    }
+  } catch (e) {
+    console.error('删除配置失败:', e)
+    alert('删除失败: ' + e.message)
   }
 }
 
 // 每路视频的AI配置
 const videoAIConfigs = ref({})
 
-// 初始化视频AI配置 - 从localStorage加载已保存的配置，初始时为空
+// 初始化视频AI配置 - 优先使用后端数据，fallback到localStorage
 const initVideoAIConfigs = () => {
-  const savedConfigs = videoStore.loadVideoAIConfigs()
-  videoAIConfigs.value = savedConfigs || {}
+  // 清空现有配置
+  videoAIConfigs.value = {}
+  
+  // 优先使用从后端获取的配置（检查是否是有效配置）
+  if (strategyStore.globalConfig && Object.keys(strategyStore.globalConfig).length > 0) {
+    videoAIConfigs.value['global'] = strategyStore.globalConfig
+  }
+  if (strategyStore.streamConfigs && Object.keys(strategyStore.streamConfigs).length > 0) {
+    for (const [sourceId, config] of Object.entries(strategyStore.streamConfigs)) {
+      if (config && Object.keys(config).length > 0) {
+        videoAIConfigs.value[sourceId] = config
+      }
+    }
+  }
+  // 如果后端没有数据，则使用本地存储
+  if (Object.keys(videoAIConfigs.value).length === 0) {
+    const savedConfigs = videoStore.loadVideoAIConfigs()
+    videoAIConfigs.value = savedConfigs || {}
+  }
 }
 
 // 保存单路视频的AI配置
-const saveVideoAIConfig = (sourceId) => {
+const saveVideoAIConfig = async (sourceId) => {
   const config = videoAIConfigs.value[sourceId]
   if (config) {
     videoStore.updateVideoAIConfig(sourceId, config)
+    // 调用后端 API 保存配置
+    if (sourceId === 'global') {
+      await strategyStore.saveGlobalConfig(config)
+    } else {
+      await strategyStore.saveStreamConfig(sourceId, config)
+    }
   }
 }
 
@@ -479,10 +536,13 @@ watch(() => videoStore.sources, () => {
   initVideoAIConfigs()
 }, { deep: true })
 
-onMounted(() => {
-  videoStore.fetchVideos().then(() => {
-    initVideoAIConfigs()
-  })
+onMounted(async () => {
+  // 获取视频源和策略配置
+  await Promise.all([
+    videoStore.fetchVideos(),
+    strategyStore.initData()
+  ])
+  initVideoAIConfigs()
   document.addEventListener('click', closeClassDropdown)
 })
 
@@ -493,6 +553,16 @@ onUnmounted(() => {
 const getYoloModelLabel = (model) => {
   const found = strategyStore.yoloModels.find(m => m.value === model)
   return found ? found.label : 'YOLOv8'
+}
+
+// 根据类型数字获取模型标签
+const getYoloModelLabelByType = (type) => {
+  const typeNum = Number(type)
+  const modelValue = strategyStore.typeModelMap ? strategyStore.typeModelMap[typeNum] : null
+  if (modelValue) {
+    return getYoloModelLabel(modelValue)
+  }
+  return getYoloModelLabel('yolov8')
 }
 
 const getYoloClassLabel = (cls) => {
@@ -736,6 +806,12 @@ const getYoloClassLabel = (cls) => {
 .confidence-slider.small .confidence-value {
   font-size: 12px;
   min-width: 38px;
+}
+
+.config-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
 .empty-tip {

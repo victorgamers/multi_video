@@ -1,8 +1,271 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+// API基础路径
+const API_BASE = 'http://192.168.0.101:5000'
+
 export const useStrategyStore = defineStore('strategy', () => {
-  const strategies = ref(JSON.parse(localStorage.getItem('strategies')) || [
+  // 策略列表
+  const strategies = ref([])
+  const globalConfig = ref(null)
+  const streamConfigs = ref({})
+  const strategyRunning = ref(false)
+  const loading = ref(false)
+
+  // 获取所有策略
+  const fetchStrategies = async () => {
+    loading.value = true
+    try {
+      const response = await fetch(`${API_BASE}/strategy/list`)
+      if (response.ok) {
+        const data = await response.json()
+        strategies.value = data
+      }
+    } catch (e) {
+      console.error('获取策略列表失败:', e)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 类型到模型名称的映射
+  const typeModelMap = {
+    1: 'yolov5',      // YOLO5
+    2: 'yolov8',      // YOLO8
+    3: 'yolov8_pose', // YOLO8POSE
+    4: 'yolov8_seg',  // YOLO8SEG
+    5: 'yolov26',     // YOLO26
+    6: 'ppocr',       // PPOCR
+    7: 'nanotrack'    // NANOTRACK
+  }
+
+  // 获取全局配置
+  const fetchGlobalConfig = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/strategy/global`)
+      if (response.ok) {
+        const data = await response.json()
+        console.log('[策略] 后端返回全局配置:', data)
+        // 后端返回数组，streamId=-1 表示全局配置
+        if (Array.isArray(data)) {
+          const globalItem = data.find(item => item.streamId === -1)
+          if (globalItem) {
+            const typeNum = Number(globalItem.type)
+            console.log('[策略] 原始type:', globalItem.type, '转换后:', typeNum, '映射结果:', typeModelMap[typeNum])
+            globalConfig.value = {
+              yoloModel: typeModelMap[typeNum] || 'yolov8',
+              yoloClass: globalItem.selectIds || [],
+              confidence: globalItem.objectThreshold || 0.5
+            }
+          } else {
+            globalConfig.value = null
+          }
+        } else if (data && (data.streamId === 0 || data.streamId === -1)) {
+          const typeNum = Number(data.type)
+          globalConfig.value = {
+            yoloModel: typeModelMap[typeNum] || 'yolov8',
+            yoloClass: data.selectIds || [],
+            confidence: data.objectThreshold || 0.5
+          }
+        } else {
+          globalConfig.value = null
+        }
+      }
+    } catch (e) {
+      console.error('获取全局配置失败:', e)
+    }
+  }
+
+  // 获取流配置
+  const fetchStreamConfigs = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/strategy/stream`)
+      if (response.ok) {
+        const data = await response.json()
+        // 转换后端格式到前端格式
+        const configs = {}
+        if (Array.isArray(data)) {
+          for (const item of data) {
+            // streamId >= 1 表示具体视频流配置
+            if (item.streamId >= 1) {
+              const typeNum = Number(item.type)
+              configs[item.streamId] = {
+                yoloModel: typeModelMap[typeNum] || 'yolov8',
+                yoloClass: item.selectIds || [],
+                confidence: item.objectThreshold || 0.5
+              }
+            }
+          }
+        }
+        streamConfigs.value = configs
+      }
+    } catch (e) {
+      console.error('获取流配置失败:', e)
+    }
+  }
+
+  // 模型类型映射
+  const modelTypeMap = {
+    'yolov5': 1,      // YOLO5
+    'yolov8': 2,      // YOLO8
+    'yolov8_pose': 3, // YOLO8POSE
+    'yolov8_seg': 4,  // YOLO8SEG
+    'yolov26': 5,     // YOLO26
+    'ppocr': 6,       // PPOCR
+    'nanotrack': 7    // NANOTRACK
+  }
+
+  // 添加策略
+  const addStrategyAPI = async (strategy) => {
+    try {
+      // 转换数据格式以匹配后端 ModelStrategy
+      const data = {
+        id: strategy.id || 0,
+        streamId: strategy.sourceId === 'global' ? 0 : parseInt(strategy.sourceId),
+        type: modelTypeMap[strategy.yoloModel] || 2,  // 默认为 YOLO8
+        selectIds: strategy.yoloClass || [],
+        objectThreshold: strategy.confidence || 0.5
+      }
+      
+      const response = await fetch(`${API_BASE}/strategy/addStrategy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      if (response.ok) {
+        await fetchStrategies()
+        return { success: true }
+      }
+      return { success: false, message: '添加策略失败' }
+    } catch (e) {
+      console.error('添加策略失败:', e)
+      return { success: false, message: e.message }
+    }
+  }
+
+  // 启动策略
+  const startStrategyAPI = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/strategy/startStrategy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      if (response.ok) {
+        strategyRunning.value = true
+        return { success: true }
+      }
+      return { success: false, message: '启动策略失败' }
+    } catch (e) {
+      console.error('启动策略失败:', e)
+      return { success: false, message: e.message }
+    }
+  }
+
+  // 修改策略
+  const changeStrategy = async (id, updates) => {
+    try {
+      const response = await fetch(`${API_BASE}/strategy/changeStrategy/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      })
+      if (response.ok) {
+        await fetchStrategies()
+        return { success: true }
+      }
+      return { success: false, message: '修改策略失败' }
+    } catch (e) {
+      console.error('修改策略失败:', e)
+      return { success: false, message: e.message }
+    }
+  }
+
+  // 删除策略
+  const deleteStrategy = async (id) => {
+    try {
+      const response = await fetch(`${API_BASE}/strategy/deleteStrategy/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      if (response.ok) {
+        await fetchStrategies()
+        return { success: true }
+      }
+      return { success: false, message: '删除策略失败' }
+    } catch (e) {
+      console.error('删除策略失败:', e)
+      return { success: false, message: e.message }
+    }
+  }
+
+  // 保存全局配置
+  const saveGlobalConfig = async (config) => {
+    try {
+      const response = await fetch(`${API_BASE}/strategy/global`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      })
+      if (response.ok) {
+        globalConfig.value = config
+        return { success: true }
+      }
+      return { success: false, message: '保存全局配置失败' }
+    } catch (e) {
+      console.error('保存全局配置失败:', e)
+      return { success: false, message: e.message }
+    }
+  }
+
+  // 保存流配置
+  const saveStreamConfig = async (sourceId, config) => {
+    try {
+      const response = await fetch(`${API_BASE}/strategy/stream/${sourceId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      })
+      if (response.ok) {
+        streamConfigs.value[sourceId] = config
+        return { success: true }
+      }
+      return { success: false, message: '保存流配置失败' }
+    } catch (e) {
+      console.error('保存流配置失败:', e)
+      return { success: false, message: e.message }
+    }
+  }
+
+  // 保存所有流配置
+  const saveAllStreamConfigs = async (configs) => {
+    try {
+      const response = await fetch(`${API_BASE}/strategy/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(configs)
+      })
+      if (response.ok) {
+        streamConfigs.value = configs
+        return { success: true }
+      }
+      return { success: false, message: '保存流配置失败' }
+    } catch (e) {
+      console.error('保存流配置失败:', e)
+      return { success: false, message: e.message }
+    }
+  }
+
+  // 初始化数据
+  const initData = async () => {
+    await Promise.all([
+      fetchStrategies(),
+      fetchGlobalConfig(),
+      fetchStreamConfigs()
+    ])
+  }
+
+  // ============ 保留旧版本地存储相关（兼容） ============
+  const localStrategies = ref(JSON.parse(localStorage.getItem('strategies')) || [
     {
       id: 1,
       name: '入口大门移动侦测',
@@ -74,14 +337,14 @@ export const useStrategyStore = defineStore('strategy', () => {
   ])
 
   const saveToStorage = () => {
-    localStorage.setItem('strategies', JSON.stringify(strategies.value))
+    localStorage.setItem('strategies', JSON.stringify(localStrategies.value))
   }
 
-  const addStrategy = (strategy) => {
-    const newId = strategies.value.length > 0 
-      ? Math.max(...strategies.value.map(s => s.id)) + 1 
+  const addLocalStrategy = (strategy) => {
+    const newId = localStrategies.value.length > 0
+      ? Math.max(...localStrategies.value.map(s => s.id)) + 1
       : 1
-    strategies.value.push({
+    localStrategies.value.push({
       ...strategy,
       id: newId
     })
@@ -89,7 +352,7 @@ export const useStrategyStore = defineStore('strategy', () => {
   }
 
   const updateStrategy = (id, updates) => {
-    const strategy = strategies.value.find(s => s.id === id)
+    const strategy = localStrategies.value.find(s => s.id === id)
     if (strategy) {
       Object.assign(strategy, updates)
       saveToStorage()
@@ -97,20 +360,20 @@ export const useStrategyStore = defineStore('strategy', () => {
   }
 
   const removeStrategy = (id) => {
-    strategies.value = strategies.value.filter(s => s.id !== id)
+    localStrategies.value = localStrategies.value.filter(s => s.id !== id)
     saveToStorage()
   }
 
   const toggleStrategy = (id) => {
-    const strategy = strategies.value.find(s => s.id === id)
+    const strategy = localStrategies.value.find(s => s.id === id)
     if (strategy) {
       strategy.enabled = !strategy.enabled
       saveToStorage()
     }
   }
 
-  const enabledCount = computed(() => strategies.value.filter(s => s.enabled).length)
-  const totalCount = computed(() => strategies.value.length)
+  const enabledCount = computed(() => localStrategies.value.filter(s => s.enabled).length)
+  const totalCount = computed(() => localStrategies.value.length)
 
   const strategyTypes = ['motion', 'intrusion', 'offline', 'cover', 'yolo']
 
@@ -141,15 +404,15 @@ export const useStrategyStore = defineStore('strategy', () => {
     { value: '自定义', label: '自定义' }
   ]
 
-  // YOLO模型列表
+  // 模型列表
   const yoloModels = [
-    { value: 'yolov5', label: 'YOLOv5 (目标检测)' },
-    { value: 'yolov8', label: 'YOLOv8 (目标检测)' },
-    { value: 'yolov8_pose', label: 'YOLOv8-Pose (人体姿态)' },
-    { value: 'yolov8_seg', label: 'YOLOv8-Seg (实例分割)' },
-    { value: 'yolov9', label: 'YOLOv9 (目标检测)' },
-    { value: 'yolov10', label: 'YOLOv10 (目标检测)' },
-    { value: 'yolov26', label: 'YOLOv2.6 (目标检测)' }
+    { value: 'yolov5', label: 'YOLOv5' },
+    { value: 'yolov8', label: 'YOLOv8' },
+    { value: 'yolov8_pose', label: 'YOLOv8-Pose' },
+    { value: 'yolov8_seg', label: 'YOLOv8-Seg' },
+    { value: 'yolov26', label: 'YOLOv2.6' },
+    { value: 'ppocr', label: 'PPOCR' },
+    { value: 'nanotrack', label: 'NanoTrack' }
   ]
 
   // YOLO检测目标类别 (COCO 80类)
@@ -253,8 +516,32 @@ export const useStrategyStore = defineStore('strategy', () => {
   }
 
   return {
+    // API相关状态
     strategies,
-    addStrategy,
+    globalConfig,
+    streamConfigs,
+    strategyRunning,
+    loading,
+    // 类型映射
+    typeModelMap,
+    modelTypeMap,
+    // API方法
+    fetchStrategies,
+    fetchGlobalConfig,
+    fetchStreamConfigs,
+    addStrategyAPI,
+    startStrategyAPI,
+    changeStrategy,
+    deleteStrategy,
+    saveGlobalConfig,
+    saveStreamConfig,
+    saveAllStreamConfigs,
+    initData,
+    // 本地存储相关（兼容）
+    globalAISettings,
+    updateGlobalAISettings,
+    localStrategies,
+    addLocalStrategy,
     updateStrategy,
     removeStrategy,
     toggleStrategy,
@@ -266,8 +553,6 @@ export const useStrategyStore = defineStore('strategy', () => {
     levelOptions,
     scheduleOptions,
     yoloModels,
-    yoloClasses,
-    globalAISettings,
-    updateGlobalAISettings
+    yoloClasses
   }
 })
